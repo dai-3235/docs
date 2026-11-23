@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-Operating guide for the slack-relay instance on the Mac mini. Written for the owner. For what it is and why, see [`slack-relay-overview.md`](../overview/). For first-time setup, see [`slack-relay-local-setup.md`](../setup/).
+Operating guide for the slack-relay instance on the Mac mini. Written for the owner. For what it is and why, see [overview](../overview/). For first-time setup, see [setup guide](../setup/).
 
 Items marked **unverified** were reasoned from the code or from how the tools normally behave and have not been exercised on this machine. Replace the marker once you have seen it work.
 
