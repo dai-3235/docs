@@ -11,3 +11,7 @@ This repo holds the actual docs. Task management lives in the hub repo `daizhixi
 ## Site
 
 The repo is an Astro and Starlight site deployed to GitHub Pages. Layout, writing rules and commands are in `README.md`. Work on a branch and open a PR. Personal blog posts (`kind: personal`) are public once merged, so only add them when the user asks.
+
+## Adding content
+
+Always start from the generators: `npm run new:post -- "Title" --tags a,b` for blog posts and `npm run new:doc -- "Title" --topic <folder>` for docs. They keep every page in the same structure as the first engineering post. Replace every `TODO`, run `npm run check:content`, and open a PR. Do not hand-write front matter or copy styles into a page.

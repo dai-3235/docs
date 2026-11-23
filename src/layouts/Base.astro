@@ -68,10 +68,10 @@ const links = [
         <span class="logo" aria-hidden="true"></span>
         <span class="brand-name">Engineering Notes</span>
       </a>
+      <div class="topbar-search"><Search /></div>
       <nav>
         {links.map((l) => <a href={l.href} class:list={[{ active: l.active }]}>{l.label}</a>)}
         <a class="gh" href="https://github.com/dai-3235/docs">GitHub</a>
-        <Search />
         <Appearance />
       </nav>
     </header>
