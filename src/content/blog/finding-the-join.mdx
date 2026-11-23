@@ -1,0 +1,220 @@
+---
+title: "Finding the join"
+description: "How a semantic query gateway picks the route of joins between two tables, from breadth-first search to a cost-ordered search with fan-out tie-breaks."
+pubDate: 2026-11-23
+kind: technical
+tags: [semantic-layer, joins]
+draft: true
+---
+
+import JoinPathDemo from '../../components/joindemo/JoinPathDemo';
+
+Of all the steps a semantic query gateway performs, choosing the joins causes the most surprising bugs. The wrong table gets used, a measure is counted twice, or a request that looks simple is refused. The earlier posts explained [why a semantic layer exists](../why-a-semantic-layer-exists/) and [how business names bind to storage](../logical-versus-physical-model/). This one follows a single question: given a metric table and a dimension table, which joins connect them?
+
+The answer is built up in stages, because each simple answer fails in an instructive way. The examples use the same invented ad-reporting model as the rest of the series, and the demo further down lets you step through the same cases.
+
+## Start with the obvious: fewest joins
+
+The first idea is to treat tables as nodes and join rules as connections, then search outward from the start table until the target appears. Breadth-first search does exactly that, and it returns the route with the fewest joins.
+
+```ts
+interface JoinRule {
+  id: string
+  from: string
+  to: string
+  cost: number
+  cardinality: 'many-to-one' | 'one-to-many' | 'many-to-many'
+  enabled: boolean
+}
+
+function fewestJoins(rules: JoinRule[], from: string, to: string): JoinRule[] | null {
+  const queue = [{ table: from, route: [] as JoinRule[] }]
+  const seen = new Set([from])
+  while (queue.length > 0) {
+    const { table, route } = queue.shift()!
+    if (table === to) return route
+    for (const rule of rules) {
+      const next = rule.from === table ? rule.to : rule.to === table ? rule.from : null
+      if (next === null || seen.has(next)) continue
+      seen.add(next)
+      queue.push({ table: next, route: [...route, rule] })
+    }
+  }
+  return null
+}
+```
+
+It is simple, it always terminates, and it finds a route whenever one exists. It also treats every join as equal, which is the problem.
+
+## Where fewest joins fails: fan-out
+
+A join where one row on the near side can match many rows on the far side is a fan-out, and it counts the near side's measures more than once.
+
+Imagine a join rule that links a line item straight to an advertiser through a bridge, so that one line item matches many advertisers and one advertiser matches many line items. The route from a line item to an advertiser is now one join. The alternative goes up through the campaign, which takes two joins, and every step of it joins many rows to one.
+
+Breadth-first search picks the single join. Ask for spend by advertiser and each line item's spend is repeated once for every advertiser it is bridged to, so the totals are too large. The query runs, the numbers look plausible, and nobody is warned.
+
+Counting joins is the wrong measure. A route should be judged by what it costs and by whether it multiplies rows.
+
+## Declared costs: a cost-ordered search
+
+Give every join rule a declared cost, and search in order of total cost instead of in order of join count. This is a cost-ordered search, the same idea as Dijkstra's algorithm: always expand the cheapest unfinished route next, and the first time the target is reached, that route is the cheapest.
+
+Costs are declared by whoever models the rule, so they express intent. A rule that is safe and cheap to run gets a low cost. A rule that is a convenient shortcut, or that is risky, gets a higher one. The first scenario in the demo below, *Cheapest beats fewest*, shows the effect: a one-join shortcut from the delivery fact to the advertiser loses to the three-join chain through line item and campaign, because the shortcut has been priced higher than the chain.
+
+A bridge rule like the one above gets a high cost for the same reason, so the safe two-join route wins.
+
+## Tie-breaks: fan-outs first, fewest joins second
+
+Costs tie. When two routes cost the same, the gateway needs a rule that is decided on purpose, not by whichever the search found first.
+
+The order used here is fewer fan-outs first, then fewer joins. Fan-out comes first because it is a correctness risk, while the number of joins is only a matter of tidiness. A route that multiplies rows is worse than a longer route that does not, at equal cost.
+
+The scenario *A fan-out tie* shows it. Going from a creative to a line item, there are two routes of equal cost. One goes up through the delivery table, which fans out because a creative matches many deliveries. The other is the direct rotation rule, which does not fan out in this direction. The direct rule wins on fan-outs, so the first tie-break decides it.
+
+If your system has other priorities, put them in the order you choose. What matters is that the order is written down.
+
+## The comparison in code
+
+Put the pieces together and the search is a loop over a list of open routes, always taking the best one by cost, then fan-outs, then joins. The helper that expands a route is shown in the section on roles.
+
+```ts
+interface State {
+  table: string
+  role: string
+  cost: number
+  fanOuts: number
+  route: JoinRule[]
+}
+
+const better = (a: State, b: State) =>
+  a.cost - b.cost || a.fanOuts - b.fanOuts || a.route.length - b.route.length
+
+function cheapestRoute(rules: JoinRule[], from: string, to: string, hopLimit: number): State | null {
+  const open: State[] = [{ table: from, role: 'default', cost: 0, fanOuts: 0, route: [] }]
+  const settled = new Map<string, number>()
+  while (open.length > 0) {
+    open.sort(better)
+    const state = open.shift()!
+    if (state.table === to) return state
+    const key = `${state.table}/${state.role}`
+    const fewestJoins = settled.get(key)
+    if (fewestJoins !== undefined && fewestJoins <= state.route.length) continue
+    settled.set(key, state.route.length)
+    if (state.route.length >= hopLimit) continue
+    for (const next of expand(rules, state)) open.push(next)
+  }
+  return null
+}
+```
+
+Disabled rules are skipped when a route is expanded in the snippet further down, which is what the scenario *A disabled shortcut* shows: switch off the cheap shortcut and the long chain takes over, with no change to the search. Declared rules shape routes.
+
+## The hop limit
+
+Left alone, the search could wander through a large graph for a long time before concluding that no route exists. A hop limit caps the number of joins in any route, so planning has a bounded cost and a request that would need an absurdly long chain is refused instead of answered with something nobody would trust.
+
+The limit interacts with cost, and the scenario *The hop limit* shows how. The cheapest route is a chain of three joins, but the limit allows fewer, so the search settles for the costlier one-join shortcut. When no route fits within the limit at all, the gateway returns the typed reason from [the previous post](../logical-versus-physical-model/): no route, with both tables and the limit named.
+
+Notice that the search remembers the fewest joins at which it settled each table, not just whether it did. Without that, a cheap but long visit to a table could hide a costlier, shorter route that the limit still permits.
+
+## Roles: one table, twice
+
+A table sometimes needs to appear twice in the same route. In the model, an advertiser has a buying agency and a billing agency, and both are rows of the agency table. If the search marked a table as visited the first time it saw it, the second join would look like going in a circle and would be thrown away.
+
+A role fixes this. It is the capacity in which a table appears in a route, and the search tracks each table together with its role. Reaching the agency table as the buying agency and as the billing agency are different states, so both are explored, while genuine loops, the same table in the same role, are still cut off.
+
+```ts
+interface RoleRule extends JoinRule {
+  fromRole?: string
+  toRole?: string
+}
+
+function extend(state: State, rule: RoleRule, table: string, role: string | undefined, fansOut: boolean): State {
+  return {
+    table,
+    role: role ?? 'default',
+    cost: state.cost + rule.cost,
+    fanOuts: state.fanOuts + (fansOut ? 1 : 0),
+    route: [...state.route, rule],
+  }
+}
+
+function expand(rules: RoleRule[], state: State): State[] {
+  const steps: State[] = []
+  for (const rule of rules.filter((candidate) => candidate.enabled)) {
+    if (rule.from === state.table && (rule.fromRole === undefined || rule.fromRole === state.role)) {
+      steps.push(extend(state, rule, rule.to, rule.toRole, rule.cardinality !== 'many-to-one'))
+    }
+    if (rule.to === state.table && (rule.toRole === undefined || rule.toRole === state.role)) {
+      steps.push(extend(state, rule, rule.from, rule.fromRole, rule.cardinality !== 'one-to-many'))
+    }
+  }
+  return steps
+}
+```
+
+The scenario *One table, two roles* runs this case: from an advertiser to the agency table, where the billing role is the cheaper of the two, so that role is taken and the step shows it.
+
+## Try it
+
+The five scenarios below are the ones described above. Pick one, then press Step to walk the route, or Play to watch it. Each step shows the current table, the rule taken, the running cost and the number of fan-outs, and the final route is also written out as text.
+
+<JoinPathDemo client:visible />
+
+## The strategy ladder
+
+A cost-ordered search finds a route from join rules that someone declared. A real gateway has several ways of finding a route, and they are not equally trustworthy. The strategy ladder orders them from most explicit to least.
+
+1. **An explicit rule for a dimension.** The model states exactly how this dimension is reached. Nothing is searched.
+2. **A declared multi-hop route.** The model names the whole sequence of joins for a case the search would otherwise have to discover.
+3. **A rule over several columns.** A join whose condition uses more than one column, tried when single-column rules do not apply.
+4. **A join inferred from a shared dimension.** Two tables are joined because they both carry the same logical dimension.
+
+```ts
+type Strategy = (request: RouteRequest) => JoinRule[] | null
+
+function findRoute(request: RouteRequest, ladder: Strategy[]) {
+  for (const strategy of ladder) {
+    const route = strategy(request)
+    if (route !== null) return { route, strategy: strategy.name }
+  }
+  return null
+}
+```
+
+The principle is that explicit beats inferred. The gateway tries each rung in order and stops at the first that finds a route, and it records which rung produced it, so a result can always be traced to a declared rule or admitted to be a guess.
+
+### The risk in the last rung
+
+Inference is convenient, and it is the rung most likely to hurt. Two tables that share a dimension name may share it by coincidence, may share it at different grains, or may agree today and stop agreeing when a column is added. A join inferred that way can be wrong without any error: the query runs, the rows match, and the numbers are quietly off. It can also fan out, because an inferred join has no declared cardinality to check.
+
+If you include this rung, limit it. Make it opt-in, put it last, require the shared dimension to have the same grain on both sides, mark any route that used it in the result, and treat a failure on that rung as a reason to add an explicit rule instead of loosening the inference. Whether to include it at all is a real choice, and for many systems the answer is no.
+
+## Pros and cons
+
+| | Advantage | Cost |
+|---|---|---|
+| Cost-ordered search | The cheapest declared route wins, and the choice is explainable | Costs are written by hand and can be wrong |
+| Fan-out tie-break | Equal-cost routes are separated by correctness risk | Fan-out must be known for every join rule |
+| Hop limit | Planning has a bounded cost | A valid but long route is refused |
+| Roles | One table can serve two purposes in a route | Roles must be declared and kept consistent |
+| Strategy ladder | Explicit rules always win over guesses | Every rung is more behavior to test |
+| Inferred rung | Fewer rules to write by hand | Silent wrong joins; limit or leave it out |
+
+## When not to build this
+
+- **Few tables and one obvious route.** If every dimension is reached one way, declare the joins and skip the search.
+- **A model that changes constantly.** Costs and cardinalities go stale when tables are reshaped weekly, and a wrong cost chooses a wrong route with confidence.
+- **No way to review costs.** If nobody owns the declared costs, the search optimizes numbers no one trusts.
+- **A tool that already fixes the joins at authoring time.** When authors write each route by hand, as in some modeling tools, searching adds a failure mode you did not have.
+
+## What it costs
+
+The search itself is small. The cost is the declarations around it: a cost, a cardinality and an on-off switch for every join rule, roles where a table repeats, and a decision, written down, about how much to infer. When the model is thin, a missing route is the most common refusal, and the best response to it is usually a new explicit rule. [The last post](../building-the-platform/) puts the search inside the service that runs it.
+
+## Related
+
+- [Why a semantic layer exists](../why-a-semantic-layer-exists/)
+- [Logical versus physical model](../logical-versus-physical-model/)
+- [Building the platform](../building-the-platform/)
