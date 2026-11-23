@@ -16,7 +16,7 @@ How to install `slack-relay` and keep it running all day on one machine. Source:
 
 ## 1. Install the plugin
 
-```bash
+```bash title="Install the plugin"
 claude plugin marketplace add dai-3235/skills
 claude plugin install slack-relay@fred-skills
 ```
@@ -34,7 +34,7 @@ Restart Claude Code or run `/reload-plugins`. The skills `slack-relay:dispatch` 
 
 Create `~/.config/slack-relay/config.json` and `chmod 600` it:
 
-```json
+```json title="~/.config/slack-relay/config.json" showLineNumbers {2-3}
 {
   "token": "xoxb-...",
   "user_ids": ["U0123ABCD"],
@@ -48,17 +48,21 @@ Create `~/.config/slack-relay/config.json` and `chmod 600` it:
 
 - `user_ids` is the allowlist. Messages from anyone else are dropped before the agent sees them.
 - Tasks only run inside `workspaces`. Start a message with the alias, for example `docs: add a glossary entry`.
-- Never commit the token. `SLACK_BOT_TOKEN` in the environment overrides the file.
+- `SLACK_BOT_TOKEN` in the environment overrides the file.
+
+:::caution[Treat the token like a password]
+Never commit it. Anyone with the bot token can read the allowlisted conversations and post as the bot.
+:::
 
 Check it:
 
-```bash
+```bash title="Check the connection"
 python3 -I ~/.claude/plugins/cache/fred-skills/slack-relay/1.0.0/scripts/slack.py whoami
 ```
 
 ## 4. Run once by hand
 
-```bash
+```bash title="Run for 8 hours"
 ~/.claude/plugins/cache/fred-skills/slack-relay/1.0.0/bin/relay-on 8
 ```
 
@@ -73,7 +77,7 @@ This checks Slack, keeps the Mac awake, and starts Claude Code listening for 8 h
 
 Start and stop:
 
-```bash
+```bash title="Start, stop and inspect"
 launchctl load ~/Library/LaunchAgents/ai.slack-relay.plist      # start
 launchctl unload ~/Library/LaunchAgents/ai.slack-relay.plist    # stop
 screen -r slack-relay                                           # look at the session (detach: Ctrl-A D)

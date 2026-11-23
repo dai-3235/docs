@@ -1,8 +1,10 @@
 ---
 import Default from '@astrojs/starlight/components/Footer.astro';
+import ShareTemplate from './ShareTemplate.astro';
 ---
 
 <Default {...Astro.props}><slot /></Default>
+<ShareTemplate />
 
 <script>
   import '../scripts/diagrams';

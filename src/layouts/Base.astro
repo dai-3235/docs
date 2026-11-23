@@ -3,6 +3,7 @@ import '../styles/theme.css';
 import '../styles/site.css';
 import Search from '../components/Search.astro';
 import Appearance from '../components/Appearance.astro';
+import ShareTemplate from '../components/ShareTemplate.astro';
 
 interface Props {
   title: string;
@@ -26,7 +27,7 @@ const links = [
 <html lang="en" data-theme="dark" data-accent="violet">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
@@ -38,6 +39,7 @@ const links = [
     <meta property="og:image" content={ogImage} />
     <meta name="twitter:card" content="summary_large_image" />
     <script is:inline>
+      document.documentElement.classList.add('js');
       const stored = localStorage.getItem('starlight-theme');
       document.documentElement.dataset.theme =
         stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
@@ -64,8 +66,10 @@ const links = [
       <span>© {new Date().getFullYear()} Engineering Notes</span>
       <span>Astro · Starlight · hybrid keyword and semantic search</span>
     </footer>
+    <ShareTemplate />
     <script>
       import '../scripts/diagrams';
+      import '../scripts/reveal';
       import '../scripts/enhance';
     </script>
   </body>

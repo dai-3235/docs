@@ -25,6 +25,10 @@ Items marked **unverified** were reasoned from the code or from how the tools no
 ## How the pieces start
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart TD
   classDef human stroke-width:1.3px
   classDef store stroke-width:1.3px
