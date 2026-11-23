@@ -12,6 +12,15 @@ Tasks for this repo are tracked in [`daizhixia3235/docs`](https://github.com/dai
 - `src/styles/`: theme
 - `GLOSSARY.md`, `docs/adr/`: domain terms and decisions
 
+## Add content the same way every time
+
+```bash
+npm run new:post -- "Post title" --kind technical --tags agents,design
+npm run new:doc -- "Page title" --topic slack-relay
+```
+
+Both commands copy a template from `templates/` into the right folder with the correct front matter and the same structure as the first engineering post: lead paragraph, diagram, approach, note, costs and related links. Replace every `TODO`, then run `npm run check:content`. The build runs the same check and fails on leftover `TODO` text, descriptions outside 40 to 200 characters, posts without tags, and front matter that does not match the schema. Because the layout, contents sidebar, share row, related block, social card and structured data come from the shared layouts, a new post or doc looks like the first one without any extra work.
+
 ## Write
 
 - A doc: add a `.md` file under `src/content/docs/<topic>/` with `title`, `description` and `sidebar.order`.
