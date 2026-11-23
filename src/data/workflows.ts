@@ -162,3 +162,72 @@ export const requestToSqlFlow: FlowDefinition = {
     { from: 'route', to: 'sql' },
   ],
 };
+
+export const platformFlow: FlowDefinition = {
+  nodes: [
+    {
+      id: 'parse',
+      title: 'Parse',
+      subtitle: 'Check the request',
+      detail: 'The request is validated against the shape the gateway accepts. Malformed requests are refused here, with a typed reason, before any metadata is read.',
+      kind: 'human',
+      icon: 'chat',
+    },
+    {
+      id: 'resolve',
+      title: 'Resolve',
+      subtitle: 'Names to bindings',
+      detail: 'Logical metrics and dimensions are matched to physical bindings. An ambiguous metric or a breakdown finer than the metric table allows stops the request with a reason.',
+      kind: 'core',
+      icon: 'shield',
+    },
+    {
+      id: 'split',
+      title: 'Split',
+      subtitle: 'One part per database',
+      detail: 'Metrics held in different databases are separated into parts that each stay inside one database. A part that would need a join across databases is refused.',
+      kind: 'gate',
+      icon: 'folder',
+    },
+    {
+      id: 'plan',
+      title: 'Plan joins',
+      subtitle: 'Routes by cost',
+      detail: 'Each part gets its route of joins through the cost-ordered search, within the hop limit and under the strategy ladder.',
+      kind: 'service',
+      icon: 'radio',
+    },
+    {
+      id: 'generate',
+      title: 'Generate SQL',
+      subtitle: 'Per dialect',
+      detail: 'Each planned part is rendered in the dialect of the engine that holds its data, through a small dialect layer that hides the differences.',
+      kind: 'service',
+      icon: 'bot',
+    },
+    {
+      id: 'execute',
+      title: 'Execute',
+      subtitle: 'Engines in parallel',
+      detail: 'Parts run against their engines with timeouts and limits. A cache can answer a part without reaching the engine.',
+      kind: 'store',
+      icon: 'send',
+    },
+    {
+      id: 'merge',
+      title: 'Merge',
+      subtitle: 'One result',
+      detail: 'Part results are combined on the shared breakdowns into one result, which carries the route and strategy used so the answer can be explained.',
+      kind: 'core',
+      icon: 'approve',
+    },
+  ],
+  edges: [
+    { from: 'parse', to: 'resolve' },
+    { from: 'resolve', to: 'split' },
+    { from: 'split', to: 'plan' },
+    { from: 'plan', to: 'generate' },
+    { from: 'generate', to: 'execute' },
+    { from: 'execute', to: 'merge' },
+  ],
+};
