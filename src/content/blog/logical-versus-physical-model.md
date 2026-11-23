@@ -4,7 +4,7 @@ description: "How a semantic query gateway separates business names from storage
 pubDate: 2026-11-23
 kind: technical
 tags: [semantic-layer, modeling]
-draft: true
+draft: false
 ---
 
 A person asking for impressions by advertiser does not care which table holds the impressions. The people running the gateway care a great deal, because the same measure may be stored in several places, at several grains, in several kinds of database. The way to serve both is to keep two models and bind them together: one in business terms, one in terms of tables and columns.
