@@ -60,26 +60,43 @@ Short version. The full step-by-step is in [`slack-relay-local-setup.md`](slack-
 
 **TBD.** There are no measurements in the repo or on the machine. Record real numbers here, labelled **measured** or **estimated**: tasks handled remotely per week, time to answer a blocked decision before and after, hours of agent time recovered.
 
-## Comparison with Muse and other remote bots
+## Comparison with other remote bots
 
-**TBD.** What is known from the source is the slack-relay side, in the table below. The columns for the other tools must be filled from their own documentation.
+Compared with the public alternatives found in a web search on 2026-11-22. Claims about other tools are as their own pages and READMEs describe them and are not tested here. Check current status before relying on any of them.
 
-| Aspect | slack-relay |
-| ------ | ----------- |
-| Transport | Slack Web API polling over HTTPS, no inbound connection |
-| Hosting | Runs on your own machine, no server |
-| Auth | Bot token plus user-ID allowlist |
-| Task scope | Configured workspace directories only |
-| Approvals | Explicit yes in Slack for risky actions |
-| Input types | Text only |
-| Notifications | Slack push on every agent message |
-| Latency | Polling interval (4 s default) |
+**Muse: TBD.** No public product called "Muse" turned up. It needs to be identified before it can be compared.
 
-Gaps and similarities to Muse and the other bots: **TBD**.
+| Tool | What it is | Channels | Similar to slack-relay | Gap versus slack-relay |
+| ---- | ---------- | -------- | ---------------------- | ---------------------- |
+| [Anthropic Remote Control](https://www.datacamp.com/tutorial/claude-code-remote-control) | Built in. Run `/rc`, scan a QR code, continue the session from the Claude mobile app. Needs Claude Code 2.1.51 or later and a paid plan | Claude mobile app | Drives a Claude Code session on your own machine from a phone | No Slack or chat app, no allowlist or workspace scoping of its own, no per-message push through a chat app |
+| [Claude Code Channels](https://dev.to/alanwest/claude-code-channels-control-your-ai-coding-agent-from-telegram-2b0n) | Official research preview. Plugin install, bot token, pairing code | Telegram, Discord | Chat bot with a bot token and a pairing step | No Slack. The bot replies only while the channel is active |
+| [claude-telegram-remote](https://github.com/oscarsterling/claude-telegram-remote) | Script set with 23 commands, checkpoint rollback, session save and restore | Telegram | Same idea on another chat app | Telegram only |
+| [Claude-Code-Remote](https://github.com/JessyTsui/Claude-Code-Remote) | Open source bridge | Discord, Slack app with slash commands, email, Telegram | Includes a Slack app | Several channels; not compared in detail |
+| [OpenACP](https://dev.to/sumaninster/telechat-vs-claude-code-channels-which-claude-on-mobile-setup-is-right-for-you-2a8k) | Connects agents (Claude Code, Gemini CLI, Codex) through the Agent Client Protocol | Telegram, Discord, Slack | Slack support | Multi-agent and multi-channel, not Claude Code only |
+
+### Similarities
+
+- All of them put a chat or phone surface in front of an agent that runs on your own machine.
+- Chat-app bots (Channels, the Telegram bots, Claude-Code-Remote) use a bot token and a pairing or allowlist step, as slack-relay does.
+
+### Gaps in slack-relay
+
+- Slack only, and one agent (Claude Code). Tools such as Claude-Code-Remote and OpenACP cover more channels or agents.
+- Text only. Files and images are ignored.
+- No session commands such as the checkpoint rollback and save and restore in claude-telegram-remote. Control is limited to `status`, `cancel` and `stop`.
+- Needs the Mac awake and online, and polls every 4 seconds instead of receiving pushes.
+- Unattended runs stall on a terminal permission prompt unless commands are pre-allowed.
+- Not a continuation of one live session the way Remote Control is. Each message is a task handed to the dispatch loop.
+
+### Where slack-relay is stronger
+
+- No public server, tunnel or Socket Mode connection.
+- A message sender allowlist, tasks limited to configured workspaces, and an explicit yes in Slack for pushes, deletes and deploys.
+- Works with a free Slack workspace and a separate bot account that triggers a real phone push for each agent message.
 
 ## Open questions
 
-1. Which tool is "Muse", and which other remote bots belong in the comparison?
+1. Which tool is "Muse"? It needs a link or description before it can be added to the comparison.
 2. What productivity figures exist, and are they measured or estimated?
 
 Follow-up work will be tracked as issues in `daizhixia3235/docs` with the `relay-bot` label and a priority.
