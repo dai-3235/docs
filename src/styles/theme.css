@@ -1,0 +1,95 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+:root {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --accent-a: #7c5cff;
+  --accent-b: #22d3ee;
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+  --sl-text-body: 1rem;
+  --sl-line-height: 1.7;
+  --sl-content-width: 46rem;
+  --radius: 14px;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0b0d14;
+  --bg-elevated: #121623;
+  --border: #232940;
+  --text: #e7e9f3;
+  --text-dim: #9aa3bd;
+  --glow: rgba(124, 92, 255, 0.28);
+  --sl-color-accent-low: #241b57;
+  --sl-color-accent: #7c5cff;
+  --sl-color-accent-high: #c4b8ff;
+  --sl-color-bg: #0b0d14;
+  --sl-color-bg-nav: #0b0d14;
+  --sl-color-bg-sidebar: #0b0d14;
+  --sl-color-hairline: #232940;
+}
+
+:root[data-theme='light'] {
+  --bg: #fbfbfe;
+  --bg-elevated: #ffffff;
+  --border: #e4e6f1;
+  --text: #14172a;
+  --text-dim: #5b6480;
+  --glow: rgba(124, 92, 255, 0.16);
+  --sl-color-accent-low: #e6e0ff;
+  --sl-color-accent: #5b3df5;
+  --sl-color-accent-high: #3a22b5;
+  --sl-color-bg: #fbfbfe;
+  --sl-color-bg-nav: #fbfbfe;
+  --sl-color-bg-sidebar: #fbfbfe;
+  --sl-color-hairline: #e4e6f1;
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3 {
+  letter-spacing: -0.02em;
+}
+
+.sl-markdown-content h2 {
+  margin-top: 2.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.sl-markdown-content :is(th, td) {
+  padding: 0.6rem 0.85rem;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.sl-markdown-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.sl-markdown-content th {
+  background: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
+  text-align: left;
+}
+
+pre.mermaid {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem;
+  background: var(--bg-elevated, transparent);
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 12px;
+  overflow-x: auto;
+}

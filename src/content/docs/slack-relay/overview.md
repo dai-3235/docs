@@ -1,10 +1,10 @@
 ---
-title: slack-relay overview
-sidebar_label: Overview
-sidebar_position: 1
+title: "slack-relay overview"
+description: "What slack-relay is, how it works, and where it stands against other remote bots."
+sidebar:
+  label: Overview
+  order: 1
 ---
-
-# slack-relay overview
 
 `slack-relay` is a Claude Code plugin that lets you drive a Claude Code session on your own machine from your phone, through a Slack app. You message the app a task, the agent does it on the machine, and the result comes back as a Slack message. Source: `https://github.com/dai-3235/skills/tree/main/slack-relay` (marketplace `fred-skills`, version 1.0.0).
 
@@ -38,7 +38,7 @@ Phone (Slack app) <--HTTPS--> slack.com <--HTTPS polling--> Mac: slack.py <-> Cl
 
 ## How it is installed
 
-Short version. The full step-by-step is in [`slack-relay-local-setup.md`](slack-relay-local-setup.md).
+Short version. The full step-by-step is in [`slack-relay-local-setup.md`](../setup/).
 
 1. `claude plugin marketplace add dai-3235/skills`, then `claude plugin install slack-relay@fred-skills`.
 2. Create the Slack app from the manifest, install it to the workspace, copy the bot token.
