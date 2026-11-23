@@ -111,3 +111,54 @@ export const taskFlow: FlowDefinition = {
     report: { x: 0, y: 618 },
   },
 };
+
+export const requestToSqlFlow: FlowDefinition = {
+  nodes: [
+    {
+      id: 'request',
+      title: 'Request',
+      subtitle: 'Business terms',
+      detail: 'A consumer asks for a logical metric broken down by logical dimensions, with filters. Nothing in the request names a table or a column.',
+      kind: 'human',
+      icon: 'chat',
+    },
+    {
+      id: 'resolve',
+      title: 'Resolve',
+      subtitle: 'Names to bindings',
+      detail: 'Each logical metric and logical dimension is matched to the physical metrics and physical dimensions that can answer it, ranked by priority.',
+      kind: 'core',
+      icon: 'shield',
+    },
+    {
+      id: 'choose',
+      title: 'Choose a table',
+      subtitle: 'Grain and virtual tables',
+      detail: 'A virtual table is picked that can answer the metric at the requested grain, with the breakdowns and filters the request needs.',
+      kind: 'gate',
+      icon: 'folder',
+    },
+    {
+      id: 'route',
+      title: 'Find a route',
+      subtitle: 'Join rules by cost',
+      detail: 'Join rules connect the metric table to each dimension table. The route is chosen by cost, with fan-out as the tie-break, and a role lets one table appear twice.',
+      kind: 'service',
+      icon: 'radio',
+    },
+    {
+      id: 'sql',
+      title: 'Generate SQL',
+      subtitle: 'For the engine',
+      detail: 'The chosen tables and route become one query in the dialect of the engine that holds the data. A request that cannot be resolved returns a reason instead.',
+      kind: 'store',
+      icon: 'send',
+    },
+  ],
+  edges: [
+    { from: 'request', to: 'resolve' },
+    { from: 'resolve', to: 'choose' },
+    { from: 'choose', to: 'route' },
+    { from: 'route', to: 'sql' },
+  ],
+};
