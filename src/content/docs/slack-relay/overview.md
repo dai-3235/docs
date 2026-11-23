@@ -38,7 +38,7 @@ Phone (Slack app) <--HTTPS--> slack.com <--HTTPS polling--> Mac: slack.py <-> Cl
 
 ## How it is installed
 
-Short version. The full step-by-step is in [`slack-relay-local-setup.md`](../setup/).
+Short version. The full step-by-step is in [setup guide](../setup/).
 
 1. `claude plugin marketplace add dai-3235/skills`, then `claude plugin install slack-relay@fred-skills`.
 2. Create the Slack app from the manifest, install it to the workspace, copy the bot token.
