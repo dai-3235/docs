@@ -31,6 +31,10 @@ Every section has a stored embedding, so similarity needs no model download. In 
 
 Posts support tags (`/blog/tags/<tag>/`), a sticky table of contents with scroll tracking, a reading progress bar, copy buttons on code, share links, previous and next links, an RSS feed (`/rss.xml`) and generated social cards (`/og/<post>.png`).
 
+## Stack
+
+Astro 7 with Starlight, MDX and `astro-icon` (Lucide icons). Design tokens (type scale, spacing, radii, shadows, motion) live in `src/styles/tokens.css`. Code blocks use Expressive Code with the Tokyo Night theme, line numbers and collapsible sections. Markdown gets GitHub-style alerts (`> [!NOTE]`) and external-link marking. Diagrams use Mermaid with the ELK layout engine and `@panzoom/panzoom` for the viewer. Scroll animation uses Motion. `starlight-links-validator` fails the build on broken internal links.
+
 ## Themes and diagrams
 
 Light and dark mode plus four accent palettes (violet, ocean, forest, sunset) are switchable from the header. Mermaid diagrams are skinned from the same variables. In a diagram, add `classDef human|store|ops|risk` and `:::store` on a node to colour it by role. Each diagram has an Expand button with zoom and pan.

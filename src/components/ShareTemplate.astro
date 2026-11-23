@@ -1,0 +1,14 @@
+---
+import { Icon } from 'astro-icon/components';
+---
+
+<template id="share-template">
+  <div class="share">
+    <span>Share</span>
+    <button type="button" data-share="copy"><span class="share-icon"><Icon name="lucide:link" size={15} />Copy link</span></button>
+    <a data-share="x" target="_blank" rel="noopener noreferrer"><span class="share-icon">X</span></a>
+    <a data-share="linkedin" target="_blank" rel="noopener noreferrer"><span class="share-icon"><Icon name="lucide:linkedin" size={15} />LinkedIn</span></a>
+    <a data-share="email"><span class="share-icon"><Icon name="lucide:mail" size={15} />Email</span></a>
+    <button type="button" data-share="native" hidden><span class="share-icon"><Icon name="lucide:share-2" size={15} />More</span></button>
+  </div>
+</template>

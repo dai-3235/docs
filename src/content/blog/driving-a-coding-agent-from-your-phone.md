@@ -23,6 +23,9 @@ flowchart LR
 - **A thin script owns the network.** The agent never holds the token. It runs a small client and reads JSON.
 - **The allowlist is the real boundary.** A chat message from an allowlisted user carries the same authority as typing in the terminal. Everything else is ignored before the agent sees it.
 
+> [!NOTE]
+> The sender allowlist is the real security boundary. Treat the Slack account like a shell on the machine.
+
 ## What it costs
 
 The machine must stay awake and online, files and images are not supported, and an unattended session stalls if a command needs an unapproved permission prompt. Those are the first things to fix next.

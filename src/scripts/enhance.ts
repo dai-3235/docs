@@ -88,41 +88,27 @@ function copyButtons() {
 }
 
 function shareRow() {
-  const row = document.createElement('div');
-  row.className = 'share';
+  const template = document.getElementById('share-template') as HTMLTemplateElement | null;
+  if (!template) return document.createElement('div');
+  const row = (template.content.firstElementChild as HTMLElement).cloneNode(true) as HTMLElement;
   const url = window.location.href.split('#')[0];
   const title = document.title;
-  const label = document.createElement('span');
-  label.textContent = 'Share';
-  row.append(label);
-  const copy = document.createElement('button');
-  copy.type = 'button';
-  copy.textContent = 'Copy link';
+  const set = (name: string, href: string) => row.querySelector<HTMLAnchorElement>(`[data-share="${name}"]`)?.setAttribute('href', href);
+  set('x', `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`);
+  set('linkedin', `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`);
+  set('email', `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`);
+  const copy = row.querySelector<HTMLButtonElement>('[data-share="copy"]')!;
   copy.addEventListener('click', async () => {
     await navigator.clipboard.writeText(url);
-    copy.textContent = 'Copied';
-    setTimeout(() => (copy.textContent = 'Copy link'), 1400);
+    const label = copy.querySelector('.share-icon')!;
+    const before = label.innerHTML;
+    label.textContent = 'Copied';
+    setTimeout(() => (label.innerHTML = before), 1400);
   });
-  row.append(copy);
-  const targets: [string, string][] = [
-    ['X', `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`],
-    ['LinkedIn', `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`],
-    ['Email', `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`],
-  ];
-  for (const [name, href] of targets) {
-    const a = document.createElement('a');
-    a.href = href;
-    a.textContent = name;
-    a.rel = 'noopener noreferrer';
-    a.target = '_blank';
-    row.append(a);
-  }
+  const native = row.querySelector<HTMLButtonElement>('[data-share="native"]')!;
   if (typeof navigator.share === 'function') {
-    const native = document.createElement('button');
-    native.type = 'button';
-    native.textContent = 'More…';
+    native.hidden = false;
     native.addEventListener('click', () => navigator.share({ title, url }).catch(() => undefined));
-    row.append(native);
   }
   return row;
 }

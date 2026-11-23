@@ -40,6 +40,10 @@ Files and images, multiple agents, multiple machines, audit storage beyond chat 
 ## 2. Architecture (what exists)
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart LR
   classDef human stroke-width:1.3px
   classDef store stroke-width:1.3px
@@ -210,6 +214,10 @@ The important honesty point: the hard security boundary is the allowlist and the
 Moving from one person on one machine to a team means replacing assumptions.
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart LR
   classDef human stroke-width:1.3px
   classDef store stroke-width:1.3px
