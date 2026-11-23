@@ -1,6 +1,8 @@
 ---
 import '../styles/theme.css';
 import '../styles/site.css';
+import Search from '../components/Search.astro';
+import Appearance from '../components/Appearance.astro';
 
 interface Props {
   title: string;
@@ -17,7 +19,7 @@ const links = [
 ---
 
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-accent="violet">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -26,20 +28,22 @@ const links = [
     <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
     <script is:inline>
       const stored = localStorage.getItem('starlight-theme');
-      const resolved = stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-      document.documentElement.dataset.theme = resolved;
+      document.documentElement.dataset.theme =
+        stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.accent = localStorage.getItem('accent') || 'violet';
     </script>
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href={`${base}/`}>
         <span class="logo" aria-hidden="true"></span>
-        Engineering Notes
+        <span class="brand-name">Engineering Notes</span>
       </a>
       <nav>
         {links.map((l) => <a href={l.href} class:list={[{ active: l.active }]}>{l.label}</a>)}
-        <a href="https://github.com/dai-3235/docs">GitHub</a>
-        <button id="theme-toggle" type="button" aria-label="Toggle theme">◐</button>
+        <a class="gh" href="https://github.com/dai-3235/docs">GitHub</a>
+        <Search />
+        <Appearance />
       </nav>
     </header>
     <main>
@@ -47,14 +51,10 @@ const links = [
     </main>
     <footer class="footer">
       <span>© {new Date().getFullYear()} Engineering Notes</span>
-      <span>Built with Astro and Starlight</span>
+      <span>Astro · Starlight · hybrid keyword and semantic search</span>
     </footer>
-    <script is:inline>
-      document.getElementById('theme-toggle').addEventListener('click', () => {
-        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-        document.documentElement.dataset.theme = next;
-        localStorage.setItem('starlight-theme', next);
-      });
+    <script>
+      import '../scripts/diagrams';
     </script>
   </body>
 </html>

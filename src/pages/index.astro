@@ -5,41 +5,50 @@ import Base from '../layouts/Base.astro';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const posts = (await getCollection('blog', ({ data }) => !data.draft))
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 5);
+  .slice(0, 4);
+const docs = await getCollection('docs');
 
 const cards = [
   {
     tag: 'System design',
-    title: 'slack-relay',
-    text: 'Drive a coding agent from your phone: architecture, mechanisms, threat model and a team-scale design.',
+    title: 'Architecture you can defend',
+    text: 'Requirements, flows, trade-offs, threat model and a team-scale version, written like an interview answer.',
     href: `${base}/slack-relay/system-design/`,
+    path: 'M4 6h16M4 12h10M4 18h16',
   },
   {
     tag: 'Runbook',
-    title: 'Operate it',
-    text: 'Checks, commands, maintenance and troubleshooting for a 24 hour unattended run.',
+    title: 'Operate it at 3 a.m.',
+    text: 'Health checks, restart commands, token rotation and a troubleshooting table that says what to do next.',
     href: `${base}/slack-relay/runbook/`,
+    path: 'M5 4h14v16H5zM9 9h6M9 13h6',
   },
   {
     tag: 'Guide',
-    title: 'Set it up',
-    text: 'Install the plugin, create the Slack app and keep it running on a Mac mini.',
+    title: 'Set it up in minutes',
+    text: 'Install the plugin, create the Slack app and keep it running for 24 hours on a Mac mini.',
     href: `${base}/slack-relay/setup/`,
+    path: 'M12 3v12m0 0-4-4m4 4 4-4M5 21h14',
   },
 ];
 ---
 
 <Base title="Engineering Notes">
   <section class="hero">
-    <span class="eyebrow">System designs · runbooks · writing</span>
+    <span class="eyebrow"><span class="dot"></span>System designs · runbooks · writing</span>
     <h1>Technical solutions, <span class="gradient">explained to be used</span></h1>
     <p>
-      Honest write-ups of how real systems are built and run: the design, the trade-offs, the failure modes,
-      and the commands to keep them alive.
+      Honest write-ups of how real systems are built and run: the design, the trade-offs, the failure modes
+      and the commands that keep them alive.
     </p>
     <div class="actions">
-      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Read the docs</a>
-      <a class="btn" href={`${base}/blog/`}>Read the blog</a>
+      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Start with slack-relay</a>
+      <button type="button" class="btn" data-search-open>Search everything <kbd>⌘K</kbd></button>
+    </div>
+    <div class="stats">
+      <span><strong>{docs.length}</strong>docs</span>
+      <span><strong>{posts.length}</strong>posts</span>
+      <span><strong>2</strong>search modes: keyword and meaning</span>
     </div>
   </section>
 
@@ -48,11 +57,46 @@ const cards = [
     <div class="cards">
       {cards.map((c) => (
         <a class="card" href={c.href}>
+          <span class="icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d={c.path} /></svg>
+          </span>
           <span class="tag">{c.tag}</span>
           <h3>{c.title}</h3>
           <p>{c.text}</p>
         </a>
       ))}
+    </div>
+
+    <h2>Featured system</h2>
+    <div class="showcase">
+      <div>
+        <span class="tag">slack-relay</span>
+        <h3>Drive a coding agent from your phone</h3>
+        <p>
+          A chat message becomes a task for an agent running on your own machine. Outbound polling means nothing
+          listens on a port, an allowlist is the trust boundary, and risky actions wait for an explicit yes.
+        </p>
+        <div class="actions" style="justify-content:flex-start">
+          <a class="btn primary" href={`${base}/slack-relay/system-design/`}>Read the design</a>
+          <a class="btn" href={`${base}/slack-relay/overview/`}>Overview</a>
+        </div>
+      </div>
+      <svg class="flow" viewBox="0 0 440 230" role="img" aria-label="Phone to Slack to your machine to the agent">
+        <rect class="box" x="10" y="20" width="110" height="56" rx="12" />
+        <text x="65" y="46">Phone</text><text class="sub" x="65" y="62">Slack app</text>
+        <rect class="box alt" x="165" y="20" width="110" height="56" rx="12" />
+        <text x="220" y="46">Slack</text><text class="sub" x="220" y="62">Web API</text>
+        <rect class="box" x="320" y="20" width="110" height="56" rx="12" />
+        <text x="375" y="46">slack.py</text><text class="sub" x="375" y="62">polls outbound</text>
+        <rect class="box alt" x="320" y="150" width="110" height="56" rx="12" />
+        <text x="375" y="176">Agent</text><text class="sub" x="375" y="192">dispatch skill</text>
+        <rect class="box" x="165" y="150" width="110" height="56" rx="12" />
+        <text x="220" y="176">Repos</text><text class="sub" x="220" y="192">allowlisted dirs</text>
+        <path class="line" d="M120 48H165" />
+        <path class="line" d="M275 48H320" />
+        <path class="line" d="M375 76V150" />
+        <path class="line" d="M320 178H275" />
+      </svg>
     </div>
 
     {posts.length > 0 && (

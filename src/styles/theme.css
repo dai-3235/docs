@@ -4,58 +4,116 @@
 :root {
   --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-  --accent-a: #7c5cff;
-  --accent-b: #22d3ee;
+  --accent: #8b6cff;
+  --accent-2: #22d3ee;
+  --radius: 14px;
   --sl-font: var(--font-sans);
   --sl-font-mono: var(--font-mono);
   --sl-text-body: 1rem;
-  --sl-line-height: 1.7;
-  --sl-content-width: 46rem;
-  --radius: 14px;
+  --sl-line-height: 1.75;
+  --sl-content-width: 47rem;
+}
+
+:root[data-accent='ocean'] {
+  --accent: #3b8cff;
+  --accent-2: #2dd4bf;
+}
+
+:root[data-accent='forest'] {
+  --accent: #2eb67d;
+  --accent-2: #a3e635;
+}
+
+:root[data-accent='sunset'] {
+  --accent: #fb7a3c;
+  --accent-2: #f43f5e;
 }
 
 :root[data-theme='dark'] {
-  --bg: #0b0d14;
-  --bg-elevated: #121623;
+  --bg: #0a0c13;
+  --bg-elevated: #11141f;
+  --bg-soft: #161a28;
   --border: #232940;
-  --text: #e7e9f3;
-  --text-dim: #9aa3bd;
-  --glow: rgba(124, 92, 255, 0.28);
-  --sl-color-accent-low: #241b57;
-  --sl-color-accent: #7c5cff;
-  --sl-color-accent-high: #c4b8ff;
-  --sl-color-bg: #0b0d14;
-  --sl-color-bg-nav: #0b0d14;
-  --sl-color-bg-sidebar: #0b0d14;
-  --sl-color-hairline: #232940;
+  --text: #e8eaf4;
+  --text-dim: #98a1bb;
+  --glow: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 :root[data-theme='light'] {
-  --bg: #fbfbfe;
+  --bg: #fafaff;
   --bg-elevated: #ffffff;
-  --border: #e4e6f1;
-  --text: #14172a;
-  --text-dim: #5b6480;
-  --glow: rgba(124, 92, 255, 0.16);
-  --sl-color-accent-low: #e6e0ff;
-  --sl-color-accent: #5b3df5;
-  --sl-color-accent-high: #3a22b5;
-  --sl-color-bg: #fbfbfe;
-  --sl-color-bg-nav: #fbfbfe;
-  --sl-color-bg-sidebar: #fbfbfe;
-  --sl-color-hairline: #e4e6f1;
+  --bg-soft: #f2f3fb;
+  --border: #e2e5f2;
+  --text: #13162a;
+  --text-dim: #586180;
+  --glow: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+:root {
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-low: color-mix(in srgb, var(--accent) 20%, var(--bg));
+  --sl-color-accent-high: color-mix(in srgb, var(--accent) 65%, var(--text));
+  --sl-color-bg: var(--bg);
+  --sl-color-bg-nav: var(--bg);
+  --sl-color-bg-sidebar: var(--bg);
+  --sl-color-bg-inline-code: var(--bg-soft);
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-text: var(--text);
+  --sl-color-white: var(--text);
+}
+
+body {
+  background: var(--bg);
+  background-image: radial-gradient(60rem 28rem at 50% -8rem, var(--glow), transparent);
+  background-repeat: no-repeat;
+}
+
+header.header {
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-content a[aria-current='page'] {
+  background: var(--sl-color-accent-low);
+  color: var(--sl-color-accent-high);
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.sidebar-content a {
+  border-radius: 8px;
 }
 
 .sl-markdown-content h1,
 .sl-markdown-content h2,
 .sl-markdown-content h3 {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
 }
 
-.sl-markdown-content h2 {
-  margin-top: 2.75rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--sl-color-hairline);
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  margin-top: 3rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sl-markdown-content a:not(.sl-anchor-link):not(.card) {
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  text-underline-offset: 3px;
+}
+
+.sl-markdown-content :not(pre) > code {
+  padding: 0.12em 0.4em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.sl-markdown-content blockquote {
+  border-inline-start: 3px solid var(--accent);
+  background: var(--bg-soft);
+  padding: 0.6rem 1rem;
+  border-radius: 0 10px 10px 0;
 }
 
 .sl-markdown-content table {
@@ -63,16 +121,16 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   overflow: hidden;
   font-size: 0.9rem;
 }
 
 .sl-markdown-content :is(th, td) {
-  padding: 0.6rem 0.85rem;
+  padding: 0.65rem 0.9rem;
   vertical-align: top;
-  border-bottom: 1px solid var(--sl-color-hairline);
+  border-bottom: 1px solid var(--border);
 }
 
 .sl-markdown-content tr:last-child td {
@@ -80,16 +138,267 @@
 }
 
 .sl-markdown-content th {
-  background: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-elevated));
   text-align: left;
+  font-weight: 650;
 }
 
-pre.mermaid {
+.sl-markdown-content tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+.expressive-code .frame {
+  box-shadow: none;
+}
+
+.appearance {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.appearance-mode,
+.appearance details > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.appearance details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.appearance details {
+  position: relative;
+}
+
+.swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sw-a), var(--sw-b));
+}
+
+.appearance-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 60;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 10rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+}
+
+.appearance-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.appearance-menu button:hover,
+.appearance-menu button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+figure.diagram {
+  margin: 1.8rem 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg));
+  overflow: hidden;
+}
+
+figure.diagram > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+figure.diagram > header button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font: inherit;
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+
+figure.diagram > header button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+figure.diagram pre.mermaid {
+  margin: 0;
+  padding: 1.4rem 1rem;
   display: flex;
   justify-content: center;
-  padding: 1.25rem;
-  background: var(--bg-elevated, transparent);
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 12px;
   overflow-x: auto;
+  background: none;
+  border: 0;
+}
+
+pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+pre.mermaid .node :is(rect, polygon, circle, ellipse, path):not(.divider),
+pre.mermaid rect.actor,
+pre.mermaid .statediagram-state rect {
+  fill: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated)) !important;
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--border)) !important;
+  stroke-width: 1.3px !important;
+}
+
+pre.mermaid .cluster rect {
+  fill: color-mix(in srgb, var(--accent) 4%, var(--bg)) !important;
+  stroke: var(--border) !important;
+  stroke-dasharray: 5 4;
+  rx: 12;
+}
+
+pre.mermaid :is(.edgePath .path, .flowchart-link, .messageLine0, .messageLine1, .transition, .relation) {
+  stroke: color-mix(in srgb, var(--accent) 70%, var(--text-dim)) !important;
+  stroke-width: 1.6px !important;
+}
+
+pre.mermaid :is(marker path, .arrowheadPath) {
+  fill: color-mix(in srgb, var(--accent) 70%, var(--text-dim)) !important;
+  stroke: color-mix(in srgb, var(--accent) 70%, var(--text-dim)) !important;
+}
+
+pre.mermaid :is(.nodeLabel, .label, .cluster-label span, .edgeLabel, span, p) {
+  color: var(--text) !important;
+  font-family: var(--font-sans) !important;
+}
+
+pre.mermaid :is(text, tspan, text.actor, .messageText, .loopText, .noteText) {
+  fill: var(--text) !important;
+  stroke: none !important;
+  font-family: var(--font-sans) !important;
+}
+
+pre.mermaid .edgeLabel,
+pre.mermaid .edgeLabel p,
+pre.mermaid .labelBkg {
+  background-color: var(--bg) !important;
+  fill: var(--bg) !important;
+}
+
+pre.mermaid .note {
+  fill: color-mix(in srgb, var(--accent-2) 14%, var(--bg-elevated)) !important;
+  stroke: var(--accent-2) !important;
+}
+
+pre.mermaid :is(.loopLine, .actor-line) {
+  stroke: var(--border) !important;
+}
+
+pre.mermaid .labelBox {
+  fill: var(--bg-soft) !important;
+  stroke: var(--border) !important;
+}
+
+.diagram-modal {
+  width: min(96vw, 80rem);
+  height: min(90vh, 52rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.diagram-modal::backdrop {
+  background: rgba(5, 6, 12, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.diagram-modal header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.diagram-modal header button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.25rem 0.7rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.diagram-stage {
+  height: calc(100% - 3.2rem);
+  overflow: hidden;
+  cursor: grab;
+  display: grid;
+  place-items: center;
+}
+
+.diagram-stage svg {
+  max-width: none;
+  transform-origin: center;
+}
+
+@media (max-width: 720px) {
+  .sl-markdown-content table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+pre.mermaid .node.human :is(rect, polygon, circle, ellipse, path) {
+  fill: color-mix(in srgb, #f59e0b 16%, var(--bg-elevated)) !important;
+  stroke: #f59e0b !important;
+}
+
+pre.mermaid .node.store :is(rect, polygon, circle, ellipse, path) {
+  fill: color-mix(in srgb, var(--accent-2) 12%, var(--bg-elevated)) !important;
+  stroke: var(--accent-2) !important;
+}
+
+pre.mermaid .node.ops :is(rect, polygon, circle, ellipse, path) {
+  fill: var(--bg-soft) !important;
+  stroke: var(--text-dim) !important;
+  stroke-dasharray: 4 3;
+}
+
+pre.mermaid .node.risk :is(rect, polygon, circle, ellipse, path) {
+  fill: color-mix(in srgb, #f43f5e 14%, var(--bg-elevated)) !important;
+  stroke: #f43f5e !important;
 }

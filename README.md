@@ -19,6 +19,14 @@ Tasks for this repo are tracked in [`daizhixia3235/docs`](https://github.com/dai
 - Diagrams: fenced `mermaid` blocks.
 - Link between docs with relative links ending in `/`, for example `../runbook/`.
 
+## Search
+
+Search is hybrid. `npm run build` splits every page into sections, then writes a keyword index (MiniSearch) and embeddings from a small quantized model (`Xenova/all-MiniLM-L6-v2`) into `dist/search/`. In the browser the palette (⌘K or `/`) ranks keyword and meaning matches together with synonyms. The model is downloaded at build time into `.cache/models` and loaded lazily the first time search opens. Set `SEARCH_SEMANTIC=0` to build keyword search only.
+
+## Themes and diagrams
+
+Light and dark mode plus four accent palettes (violet, ocean, forest, sunset) are switchable from the header. Mermaid diagrams are skinned from the same variables. In a diagram, add `classDef human|store|ops|risk` and `:::store` on a node to colour it by role. Each diagram has an Expand button with zoom and pan.
+
 ## Run locally
 
 Needs Node 22.23.4 or newer (see `.nvmrc`).

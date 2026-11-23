@@ -41,19 +41,28 @@ Files and images, multiple agents, multiple machines, audit storage beyond chat 
 
 ```mermaid
 flowchart LR
-  P["Phone<br/>Slack app"] <-->|HTTPS| SL["Slack<br/>Web API"]
-  subgraph Mac["Developer machine"]
-    SC["slack.py<br/>(stdlib client)"]
-    AG["Claude Code session<br/>dispatch skill"]
-    WS["Workspaces<br/>(allowlisted dirs)"]
-    CF["config.json<br/>token, user_ids, workspaces"]
-    LD["launchd + screen<br/>+ caffeinate"]
+  classDef human stroke-width:1.3px
+  classDef store stroke-width:1.3px
+  classDef ops stroke-width:1.3px
+  classDef risk stroke-width:1.3px
+  P(["Phone<br/>Slack app"]):::human
+  subgraph Cloud["Slack cloud"]
+    SL["Slack Web API"]
   end
-  SC <-->|"outbound only,<br/>poll every 4 s"| SL
+  subgraph Mac["Developer machine"]
+    direction TB
+    SC["slack.py<br/>stdlib client"]
+    AG["Claude Code session<br/>dispatch skill"]
+    WS[("Workspaces<br/>allowlisted dirs")]:::store
+    CF[/"config.json<br/>token, user_ids, workspaces"/]:::store
+    LD["launchd + screen + caffeinate"]:::ops
+  end
+  P <-->|HTTPS| SL
+  SC <-->|"outbound poll, every 4 s"| SL
   SC --- CF
   AG <-->|"JSON on stdout"| SC
   AG --> WS
-  LD -.-> AG
+  LD -.->|keeps alive| AG
 ```
 
 Design choices that define it:
@@ -202,28 +211,35 @@ Moving from one person on one machine to a team means replacing assumptions.
 
 ```mermaid
 flowchart LR
+  classDef human stroke-width:1.3px
+  classDef store stroke-width:1.3px
+  classDef ops stroke-width:1.3px
+  classDef risk stroke-width:1.3px
   subgraph Chat["Chat platforms"]
     SL["Slack"]
     TG["Telegram"]
   end
   GW["Gateway<br/>verify signatures, authn, rate limit"]
-  Q[("Task queue")]
-  ST[("State store<br/>tasks, cursors, approvals")]
-  AU[("Audit log")]
+  Q[("Task queue")]:::store
+  ST[("State store<br/>tasks, cursors, approvals")]:::store
+  AU[("Audit log")]:::store
   SCH["Scheduler<br/>routes to a runner"]
   subgraph Runners["Isolated runners"]
     R1["Runner A<br/>sandbox, scoped creds"]
     R2["Runner B<br/>sandbox, scoped creds"]
   end
+  H(["Approver"]):::human
   SL --> GW
   TG --> GW
-  GW --> Q --> SCH --> R1
+  GW --> Q --> SCH
+  SCH --> R1
   SCH --> R2
   R1 --> ST
   R2 --> ST
   GW --> AU
   R1 --> AU
-  R1 -->|results| GW
+  R1 -->|"risky action"| H
+  H -->|"typed approval"| GW
 ```
 
 | Concern | Single-user (built) | Team scale (proposed) |
