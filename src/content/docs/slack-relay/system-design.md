@@ -1,14 +1,14 @@
 ---
-title: System design: remote control of a coding agent
-sidebar_label: System design
-sidebar_position: 4
+title: "System design: remote control of a coding agent"
+description: "Requirements, architecture, mechanisms, threat model and a team-scale design."
+sidebar:
+  label: System design
+  order: 4
 ---
-
-# System design: remote control of a coding agent through a chat app
 
 A design write-up built on slack-relay, an implemented system, and extended to what an industry-grade version would need. Sections say whether a point describes **what exists** (taken from the code) or a **proposal** (not built). Use it as a system design interview answer or as a solution outline.
 
-Related: [overview](slack-relay-overview.md), [runbook](slack-relay-runbook.md).
+Related: [overview](../overview/), [runbook](../runbook/).
 
 ## 1. Problem
 
@@ -249,7 +249,7 @@ Data model sketch for the store: `Task(id, requester, repo, text, state, created
 - Approval rate and rejection rate for risky actions.
 - Restart count and mean time to recovery.
 
-The productivity figures in the [overview](slack-relay-overview.md) are still TBD. These are the measurements that would fill them in.
+The productivity figures in the [overview](../overview/) are still TBD. These are the measurements that would fill them in.
 
 ## 9. Interview talking points
 

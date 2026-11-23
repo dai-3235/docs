@@ -1,12 +1,12 @@
 ---
-title: slack-relay runbook
-sidebar_label: Runbook
-sidebar_position: 3
+title: "slack-relay runbook"
+description: "Operating guide: checks, commands, maintenance and troubleshooting."
+sidebar:
+  label: Runbook
+  order: 3
 ---
 
-# slack-relay runbook
-
-Operating guide for the slack-relay instance on the Mac mini. Written for the owner. For what it is and why, see [`slack-relay-overview.md`](slack-relay-overview.md). For first-time setup, see [`slack-relay-local-setup.md`](slack-relay-local-setup.md).
+Operating guide for the slack-relay instance on the Mac mini. Written for the owner. For what it is and why, see [`slack-relay-overview.md`](../overview/). For first-time setup, see [`slack-relay-local-setup.md`](../setup/).
 
 Items marked **unverified** were reasoned from the code or from how the tools normally behave and have not been exercised on this machine. Replace the marker once you have seen it work.
 

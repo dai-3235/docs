@@ -1,0 +1,76 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 5);
+
+const cards = [
+  {
+    tag: 'System design',
+    title: 'slack-relay',
+    text: 'Drive a coding agent from your phone: architecture, mechanisms, threat model and a team-scale design.',
+    href: `${base}/slack-relay/system-design/`,
+  },
+  {
+    tag: 'Runbook',
+    title: 'Operate it',
+    text: 'Checks, commands, maintenance and troubleshooting for a 24 hour unattended run.',
+    href: `${base}/slack-relay/runbook/`,
+  },
+  {
+    tag: 'Guide',
+    title: 'Set it up',
+    text: 'Install the plugin, create the Slack app and keep it running on a Mac mini.',
+    href: `${base}/slack-relay/setup/`,
+  },
+];
+---
+
+<Base title="Engineering Notes">
+  <section class="hero">
+    <span class="eyebrow">System designs · runbooks · writing</span>
+    <h1>Technical solutions, <span class="gradient">explained to be used</span></h1>
+    <p>
+      Honest write-ups of how real systems are built and run: the design, the trade-offs, the failure modes,
+      and the commands to keep them alive.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Read the docs</a>
+      <a class="btn" href={`${base}/blog/`}>Read the blog</a>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Start here</h2>
+    <div class="cards">
+      {cards.map((c) => (
+        <a class="card" href={c.href}>
+          <span class="tag">{c.tag}</span>
+          <h3>{c.title}</h3>
+          <p>{c.text}</p>
+        </a>
+      ))}
+    </div>
+
+    {posts.length > 0 && (
+      <>
+        <h2>Latest from the blog</h2>
+        <ul class="post-list">
+          {posts.map((p) => (
+            <li>
+              <a href={`${base}/blog/${p.id}/`}>
+                <span>{p.data.title}</span>
+                <time datetime={p.data.pubDate.toISOString()}>
+                  {p.data.pubDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </time>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+  </section>
+</Base>

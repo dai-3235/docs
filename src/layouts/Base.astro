@@ -1,0 +1,60 @@
+---
+import '../styles/theme.css';
+import '../styles/site.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'System designs, runbooks and technical writing.' } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const path = Astro.url.pathname;
+const links = [
+  { href: `${base}/slack-relay/overview/`, label: 'Docs', active: path.includes('/slack-relay/') },
+  { href: `${base}/blog/`, label: 'Blog', active: path.includes('/blog/') },
+];
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+    <script is:inline>
+      const stored = localStorage.getItem('starlight-theme');
+      const resolved = stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = resolved;
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href={`${base}/`}>
+        <span class="logo" aria-hidden="true"></span>
+        Engineering Notes
+      </a>
+      <nav>
+        {links.map((l) => <a href={l.href} class:list={[{ active: l.active }]}>{l.label}</a>)}
+        <a href="https://github.com/dai-3235/docs">GitHub</a>
+        <button id="theme-toggle" type="button" aria-label="Toggle theme">◐</button>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="footer">
+      <span>© {new Date().getFullYear()} Engineering Notes</span>
+      <span>Built with Astro and Starlight</span>
+    </footer>
+    <script is:inline>
+      document.getElementById('theme-toggle').addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        localStorage.setItem('starlight-theme', next);
+      });
+    </script>
+  </body>
+</html>

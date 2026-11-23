@@ -1,0 +1,48 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const posts = (await getCollection('blog', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
+);
+---
+
+<Base title="Blog · Engineering Notes" description="Technical and personal writing.">
+  <div class="article">
+    <h1>Blog</h1>
+    <p class="meta">Technical write-ups and the occasional personal note.</p>
+    <div class="filters" role="group" aria-label="Filter posts">
+      <button type="button" data-kind="all" aria-pressed="true">All</button>
+      <button type="button" data-kind="technical" aria-pressed="false">Technical</button>
+      <button type="button" data-kind="personal" aria-pressed="false">Personal</button>
+    </div>
+    <ul class="post-list">
+      {posts.map((p) => (
+        <li data-kind={p.data.kind}>
+          <a href={`${base}/blog/${p.id}/`}>
+            <span>
+              <strong>{p.data.title}</strong><br />
+              <span class="meta">{p.data.description}</span>
+            </span>
+            <time datetime={p.data.pubDate.toISOString()}>
+              {p.data.pubDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </time>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+  <script is:inline>
+    const buttons = document.querySelectorAll('.filters button');
+    const items = document.querySelectorAll('.post-list li');
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        buttons.forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        items.forEach((item) => {
+          item.hidden = button.dataset.kind !== 'all' && item.dataset.kind !== button.dataset.kind;
+        });
+      });
+    });
+  </script>
+</Base>
