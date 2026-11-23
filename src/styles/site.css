@@ -410,6 +410,14 @@ a {
   font-size: 0.92rem;
 }
 
+@media (max-width: 720px) {
+  .prose table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 .prose :is(th, td) {
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--border);
@@ -584,6 +592,8 @@ a {
 }
 
 .post-layout .article {
+  width: 100%;
+  min-width: 0;
   max-width: none;
   padding: 3rem 0 5rem;
 }
