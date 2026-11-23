@@ -2,6 +2,8 @@
 import { getCollection } from 'astro:content';
 import { Icon } from 'astro-icon/components';
 import Base from '../layouts/Base.astro';
+import Workflow from '../components/workflow/Workflow';
+import { taskFlow } from '../data/workflows';
 import { tagCounts, tagSlug, publishedPosts, readingMinutes, formatDate } from '../lib/blog';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -15,22 +17,6 @@ const questions = [
   'What do I do when it stops responding?',
 ];
 const docs = await getCollection('docs');
-
-const steps = [
-  { title: 'Phone', sub: 'sends the task' },
-  { title: 'Slack', sub: 'holds the message' },
-  { title: 'slack.py', sub: 'polls outbound' },
-  { title: 'Agent', sub: 'does the work' },
-  { title: 'Repos', sub: 'allowlisted dirs' },
-];
-const wide = [
-  { x: 10, y: 22 },
-  { x: 230, y: 22 },
-  { x: 450, y: 22 },
-  { x: 450, y: 142 },
-  { x: 230, y: 142 },
-];
-const tall = steps.map((_, i) => ({ x: 40, y: 16 + i * 92 }));
 
 const cards = [
   {
@@ -109,44 +95,7 @@ const cards = [
         </div>
       </div>
       <div class="flow-wrap">
-        <svg class="flow flow-wide" viewBox="0 0 610 226" role="img" aria-label="Task flow: phone to Slack to slack.py to the agent to the repos">
-          <defs>
-            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head" /></marker>
-          </defs>
-          <path id="w1" class="line" d="M160 54H230" marker-end="url(#arr)" />
-          <path id="w2" class="line" d="M380 54H450" marker-end="url(#arr)" />
-          <path id="w3" class="line" d="M525 86V142" marker-end="url(#arr)" />
-          <path id="w4" class="line" d="M450 174H380" marker-end="url(#arr)" />
-          {['w1', 'w2', 'w3', 'w4'].map((id, i) => (
-            <circle class="packet" r="4"><animateMotion dur="2.4s" begin={`${i * 0.6}s`} repeatCount="indefinite"><mpath href={`#${id}`} /></animateMotion></circle>
-          ))}
-          {steps.map((step, i) => (
-            <g class={`node n${i}`} transform={`translate(${wide[i].x} ${wide[i].y})`}>
-              <rect class={i % 2 ? 'box alt' : 'box'} width="150" height="64" rx="14" />
-              <circle class="badge" cx="0" cy="0" r="11" />
-              <text class="num" x="0" y="4">{i + 1}</text>
-              <text x="75" y="30">{step.title}</text>
-              <text class="sub" x="75" y="48">{step.sub}</text>
-            </g>
-          ))}
-        </svg>
-        <svg class="flow flow-tall" viewBox="0 0 320 470" role="img" aria-label="Task flow: phone to Slack to slack.py to the agent to the repos">
-          <defs>
-            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head" /></marker>
-          </defs>
-          {tall.slice(0, -1).map((n, i) => (
-            <path class="line" d={`M160 ${n.y + 60}V${n.y + 92}`} marker-end="url(#arr2)" />
-          ))}
-          {steps.map((step, i) => (
-            <g class={`node n${i}`} transform={`translate(${tall[i].x} ${tall[i].y})`}>
-              <rect class={i % 2 ? 'box alt' : 'box'} width="240" height="60" rx="14" />
-              <circle class="badge" cx="0" cy="0" r="11" />
-              <text class="num" x="0" y="4">{i + 1}</text>
-              <text x="120" y="27">{step.title}</text>
-              <text class="sub" x="120" y="45">{step.sub}</text>
-            </g>
-          ))}
-        </svg>
+        <Workflow client:visible flow={taskFlow} title="Task flow" height={360} />
       </div>
     </div>
 

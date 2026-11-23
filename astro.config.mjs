@@ -5,6 +5,7 @@ import mermaid from 'astro-mermaid';
 import mdx from '@astrojs/mdx';
 import { unified } from '@astrojs/markdown-remark';
 import icon from 'astro-icon';
+import react from '@astrojs/react';
 import rehypeExternalLinks from 'rehype-external-links';
 import remarkGithubBlockquoteAlert from 'remark-github-blockquote-alert';
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers';
@@ -85,5 +86,6 @@ export default defineConfig({
     }),
     mdx(),
     icon(),
+    react(),
   ],
 });
