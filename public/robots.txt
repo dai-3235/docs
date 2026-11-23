@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dai-3235.github.io/docs/sitemap-index.xml

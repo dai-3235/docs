@@ -6,6 +6,9 @@ sidebar:
   order: 1
 ---
 
+import Workflow from '../../../components/workflow/Workflow';
+import { taskFlow } from '../../../data/workflows';
+
 `slack-relay` is a Claude Code plugin that lets you drive a Claude Code session on your own machine from your phone, through a Slack app. You message the app a task, the agent does it on the machine, and the result comes back as a Slack message. Source: `https://github.com/dai-3235/skills/tree/main/slack-relay` (marketplace `fred-skills`, version 1.0.0).
 
 Sections marked **TBD** need facts that are not in the source code. They are listed under [Open questions](#open-questions) and must not be filled with guesses.
@@ -16,9 +19,9 @@ Agent sessions are most useful when they run for a long time, but they stall at 
 
 ## How it works
 
-```
-Phone (Slack app) <--HTTPS--> slack.com <--HTTPS polling--> Mac: slack.py <-> Claude Code session
-```
+<Workflow client:visible flow={taskFlow} title="Task flow" height={420} />
+
+Select a step to read what happens there, or press Play to walk through it.
 
 - **No public server.** The Mac polls Slack's Web API over HTTPS (`conversations.history` / `conversations.replies`, every 4 s by default). Nothing listens on a port, so no tunnel or firewall change is needed.
 - **A Slack app with a bot user** (manifest: `slack-app-manifest.json`). Because it is a separate account, the phone gets a real push notification for each agent message.
