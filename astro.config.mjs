@@ -34,7 +34,12 @@ export default defineConfig({
         ThemeSelect: './src/components/ThemeSelect.astro',
         Footer: './src/components/Footer.astro',
       },
-      head: [{ tag: 'script', content: initTheme }],
+      head: [
+        { tag: 'script', content: initTheme },
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://dai-3235.github.io/docs/og/default.png' } },
+        { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+        { tag: 'link', attrs: { rel: 'alternate', type: 'application/rss+xml', title: 'Engineering Notes', href: '/docs/rss.xml' } },
+      ],
       expressiveCode: { themes: ['night-owl', 'github-light'], styleOverrides: { borderRadius: '12px' } },
       editLink: { baseUrl: 'https://github.com/dai-3235/docs/edit/main/' },
       lastUpdated: true,

@@ -1,0 +1,37 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { publishedPosts, readingMinutes, formatDate, tagCounts, tagSlug } from '../../../lib/blog';
+
+export async function getStaticPaths() {
+  const posts = await publishedPosts();
+  return tagCounts(posts).map(([tag]) => ({
+    params: { tag: tagSlug(tag) },
+    props: { tag, posts: posts.filter((p) => p.data.tags.includes(tag)) },
+  }));
+}
+
+const { tag, posts } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<Base title={`#${tag} · Engineering Notes`} description={`Posts tagged ${tag}.`}>
+  <div class="blog-wrap">
+    <header class="blog-head">
+      <a class="meta" href={`${base}/blog/`}>← All posts</a>
+      <h1>#{tag}</h1>
+      <p>{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+    </header>
+    <ul class="post-grid">
+      {posts.map((p) => (
+        <li>
+          <a href={`${base}/blog/${p.id}/`}>
+            <span class="tag">{p.data.kind}</span>
+            <h3>{p.data.title}</h3>
+            <p>{p.data.description}</p>
+            <span class="meta">{formatDate(p.data.pubDate)} · {readingMinutes(p)} min read</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</Base>

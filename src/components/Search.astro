@@ -20,10 +20,11 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       <button type="button" data-kind="doc" aria-pressed="false">Docs</button>
       <button type="button" data-kind="blog" aria-pressed="false">Blog</button>
     </div>
+    <div class="search-banner"></div>
     <ul class="search-results" role="listbox"></ul>
     <div class="search-empty"></div>
     <div class="search-footer">
-      <span class="search-hints"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>↵</kbd> open</span>
+      <span class="search-hints"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>↵</kbd> open <kbd>tab</kbd> similar</span>
       <span class="search-status" aria-live="polite"></span>
     </div>
   </div>
@@ -37,25 +38,44 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   const list = dialog.querySelector<HTMLUListElement>('.search-results')!;
   const empty = dialog.querySelector<HTMLDivElement>('.search-empty')!;
   const statusEl = dialog.querySelector<HTMLSpanElement>('.search-status')!;
+  const banner = dialog.querySelector<HTMLDivElement>('.search-banner')!;
   const scopes = dialog.querySelectorAll<HTMLButtonElement>('.search-scopes button');
   const engine = createEngine(dialog.dataset.base ?? '');
   const ignored = new Set(['the', 'and', 'for', 'how', 'does', 'from', 'with', 'that', 'this', 'what', 'when', 'can']);
   const suggestions = ['how does it work', 'keep it running', 'security risks', 'compare alternatives'];
+  const RECENT_KEY = 'search-recent';
 
   let kind: Kind = 'all';
   let hits: Hit[] = [];
   let active = 0;
   let timer: number | undefined;
   let token = 0;
+  let similarTo: Hit | null = null;
 
   const escapeHtml = (text: string) =>
     text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  function recent(): string[] {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  function remember(query: string) {
+    const q = query.trim();
+    if (q.length < 3) return;
+    const next = [q, ...recent().filter((r) => r !== q)].slice(0, 5);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  }
 
   function highlight(text: string, terms: string[]) {
     const safe = escapeHtml(text);
     const words = [...new Set(terms.map((t) => t.toLowerCase()).filter((t) => t.length > 2 && !ignored.has(t)))];
     if (!words.length) return safe;
-    const pattern = new RegExp(`\\b(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+    const escape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b(${words.map((w) => (w.length <= 3 ? `${escape(w)}\\b` : escape(w))).join('|')})`, 'gi');
     return safe.replace(pattern, '<mark>$1</mark>');
   }
 
@@ -63,6 +83,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     const lower = text.toLowerCase();
     let at = -1;
     for (const term of terms) {
+      if (term.length < 3) continue;
       const found = lower.indexOf(term.toLowerCase());
       if (found >= 0 && (at < 0 || found < at)) at = found;
     }
@@ -73,10 +94,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   function renderStatus(s: Status) {
     if (s.keyword === 'error') statusEl.textContent = 'Search index unavailable';
-    else if (s.semantic === 'ready') statusEl.textContent = 'Keyword + meaning';
-    else if (s.semantic === 'loading') statusEl.textContent = `Loading semantic model ${s.progress}%`;
+    else if (s.semantic === 'ready') statusEl.textContent = 'Hybrid: keyword + meaning';
+    else if (s.semantic === 'loading') statusEl.textContent = `Loading meaning model ${s.progress}%`;
     else if (s.semantic === 'unavailable') statusEl.textContent = 'Keyword search';
-    else if (s.semantic === 'error') statusEl.textContent = 'Keyword search (semantic failed to load)';
+    else if (s.semantic === 'error') statusEl.textContent = 'Keyword search (model failed to load)';
     else statusEl.textContent = s.keyword === 'ready' ? 'Keyword search' : 'Loading…';
   }
 
@@ -88,30 +109,43 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     items[active].scrollIntoView({ block: 'nearest' });
   }
 
+  function chips(items: string[], attr: string) {
+    return items.map((s) => `<button type="button" ${attr}="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
+  }
+
   function renderHome() {
     list.innerHTML = '';
-    empty.innerHTML = `<p>Try a question, not just a keyword.</p><div class="search-suggest">${suggestions
-      .map((s) => `<button type="button" data-suggest="${escapeHtml(s)}">${escapeHtml(s)}</button>`)
-      .join('')}</div>`;
+    banner.innerHTML = '';
+    const past = recent();
+    empty.innerHTML = `${past.length ? `<p>Recent</p><div class="search-suggest">${chips(past, 'data-suggest')}</div>` : ''}<p>Try a question, not just a keyword.</p><div class="search-suggest">${chips(suggestions, 'data-suggest')}</div>`;
+  }
+
+  function matchChip(hit: Hit) {
+    const label = hit.match === 'both' ? 'keyword + meaning' : hit.match === 'meaning' ? 'by meaning' : 'keyword';
+    return `<span class="search-match ${hit.match}">${label}</span>`;
   }
 
   function render(query: string) {
     const queryTerms = query.toLowerCase().split(/\W+/).filter(Boolean);
+    banner.innerHTML = similarTo
+      ? `<button type="button" class="search-back" data-back>← Back</button><span>Similar to <strong>${escapeHtml(similarTo.title)}${similarTo.section ? ` › ${escapeHtml(similarTo.section)}` : ''}</strong></span>`
+      : '';
     if (!hits.length) {
       list.innerHTML = '';
-      empty.innerHTML = `<p>No results for <strong>${escapeHtml(query)}</strong>.</p>`;
+      empty.innerHTML = similarTo ? '<p>Nothing similar enough.</p>' : `<p>No results for <strong>${escapeHtml(query)}</strong>.</p>`;
       return;
     }
     empty.innerHTML = '';
     list.innerHTML = hits
       .map((hit, i) => {
-        const terms = [...queryTerms, ...hit.terms];
-        const badge = hit.semantic && !hit.keyword ? '<span class="search-badge">by meaning</span>' : '';
-        return `<li role="option" aria-selected="${i === 0}" data-url="${escapeHtml(hit.url)}">
+        const terms = similarTo ? [] : [...queryTerms, ...hit.terms];
+        return `<li role="option" aria-selected="${i === 0}" data-url="${escapeHtml(hit.url)}" data-id="${hit.id}">
           <div class="search-row"><span class="search-kind">${hit.kind === 'blog' ? 'Blog' : 'Docs'}</span>
-          <span class="search-title">${highlight(hit.title, terms)}</span>${badge}</div>
+          <span class="search-title">${highlight(hit.title, terms)}</span>
+          <span class="search-rel" title="Relevance ${Math.round(hit.score * 100)}%"><i style="width:${Math.max(8, Math.round(hit.score * 100))}%"></i></span></div>
           ${hit.section ? `<div class="search-section">${highlight(hit.section, terms)}</div>` : ''}
           <div class="search-snippet">${highlight(excerpt(hit.snippet, terms), terms)}</div>
+          <div class="search-meta">${similarTo ? '' : matchChip(hit)}<button type="button" class="search-similar" data-similar="${hit.id}">Find similar</button></div>
         </li>`;
       })
       .join('');
@@ -121,11 +155,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   async function run() {
     const query = input.value.trim();
     const mine = ++token;
+    similarTo = null;
     if (!query) {
       hits = [];
       renderHome();
       return;
     }
+    if (query.length >= 2) engine.loadModel();
     try {
       const found = await engine.search(query, kind);
       if (mine !== token) return;
@@ -136,26 +172,43 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     }
   }
 
-  function open() {
+  async function showSimilar(id: number) {
+    const source = hits.find((h) => h.id === id) ?? null;
+    if (!source) return;
+    const mine = ++token;
+    const found = await engine.similar(id, kind);
+    if (mine !== token) return;
+    similarTo = source;
+    hits = found;
+    render(input.value);
+  }
+
+  function open(query?: string) {
     if (!dialog.open) dialog.showModal();
+    if (query !== undefined) input.value = query;
     input.focus();
     input.select();
     renderStatus(engine.status());
-    engine.loadKeyword().then(() => engine.loadSemantic()).catch(() => undefined);
-    if (!input.value) renderHome();
+    engine.loadKeyword().then(() => engine.loadVectors()).catch(() => undefined);
+    if (input.value.trim()) run();
+    else renderHome();
   }
 
   function go(url: string) {
+    remember(input.value);
     dialog.close();
     window.location.href = url;
   }
 
   engine.subscribe((s) => {
     renderStatus(s);
-    if (s.semantic === 'ready' && input.value.trim()) run();
+    if (s.semantic === 'ready' && input.value.trim() && !similarTo) run();
   });
 
-  document.querySelectorAll('[data-search-open]').forEach((el) => el.addEventListener('click', open));
+  document.querySelectorAll('[data-search-open]').forEach((el) => el.addEventListener('click', () => open()));
+  document.querySelectorAll<HTMLElement>('[data-search-query]').forEach((el) =>
+    el.addEventListener('click', () => open(el.dataset.searchQuery)),
+  );
 
   document.addEventListener('keydown', (event) => {
     const typing = ['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName);
@@ -178,16 +231,36 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     } else if (event.key === 'Enter') {
       const item = list.querySelectorAll<HTMLLIElement>('li')[active];
       if (item?.dataset.url) go(item.dataset.url);
+    } else if (event.key === 'Tab' && event.shiftKey === false && document.activeElement === input) {
+      const item = list.querySelectorAll<HTMLLIElement>('li')[active];
+      if (item?.dataset.id) {
+        event.preventDefault();
+        showSimilar(Number(item.dataset.id));
+      }
     }
   });
 
   dialog.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
-    if (target === dialog || target.closest('.search-close')) dialog.close();
+    if (target === dialog || target.closest('.search-close')) {
+      dialog.close();
+      return;
+    }
     const suggest = target.closest<HTMLElement>('[data-suggest]');
     if (suggest) {
       input.value = suggest.dataset.suggest ?? '';
       run();
+      return;
+    }
+    if (target.closest('[data-back]')) {
+      run();
+      return;
+    }
+    const similar = target.closest<HTMLElement>('[data-similar]');
+    if (similar) {
+      event.stopPropagation();
+      showSimilar(Number(similar.dataset.similar));
+      return;
     }
     const item = target.closest<HTMLLIElement>('li[data-url]');
     if (item?.dataset.url) go(item.dataset.url);
@@ -449,5 +522,90 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   .search-hints kbd {
     margin-right: 0.2rem;
+  }
+
+  .search-banner:not(:empty) {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  .search-back {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    padding: 0.15rem 0.6rem;
+    cursor: pointer;
+  }
+
+  .search-rel {
+    margin-left: auto;
+    width: 3.2rem;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--border);
+    overflow: hidden;
+    flex: none;
+  }
+
+  .search-rel i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+
+  .search-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
+  }
+
+  .search-match {
+    font-size: 0.68rem;
+    padding: 0.05rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .search-match.meaning,
+  .search-match.both {
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+  }
+
+  .search-similar {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .search-results li:hover .search-similar,
+  .search-results li[aria-selected='true'] .search-similar {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    .search-similar {
+      opacity: 1;
+    }
+    .search-trigger .search-kbd {
+      display: none;
+    }
+  }
+
+  .search-empty p {
+    margin: 0.2rem 0;
   }
 </style>

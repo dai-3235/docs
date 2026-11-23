@@ -489,3 +489,262 @@ a {
   color: var(--text-dim);
   font-size: 0.85rem;
 }
+
+.blog-wrap {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 3rem clamp(1rem, 4vw, 2rem) 5rem;
+}
+
+.blog-head h1 {
+  margin: 0.3rem 0 0.4rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.blog-head p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.blog-head a {
+  color: var(--accent);
+}
+
+.featured {
+  display: block;
+  margin: 2rem 0 1.5rem;
+  padding: clamp(1.4rem, 3vw, 2.2rem);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background:
+    radial-gradient(30rem 14rem at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    linear-gradient(160deg, var(--bg-elevated), var(--bg));
+  text-decoration: none;
+  transition: border-color 0.18s, transform 0.18s;
+}
+
+.featured:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.featured h2 {
+  margin: 0.2rem 0 0.5rem;
+  font-size: clamp(1.5rem, 3.4vw, 2.2rem);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+}
+
+.featured p {
+  margin: 0 0 0.8rem;
+  max-width: 40rem;
+  color: var(--text-dim);
+}
+
+.topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.4rem 0 1.4rem;
+}
+
+.topics a {
+  padding: 0.2rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.topics a:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.topics small {
+  opacity: 0.7;
+}
+
+.post-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+}
+
+.post-grid li[hidden] {
+  display: none;
+}
+
+.post-grid a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: 100%;
+  padding: 1.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--bg-elevated), var(--bg));
+  text-decoration: none;
+  transition: border-color 0.18s, transform 0.18s;
+}
+
+.post-grid a:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.post-grid h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.post-grid p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.post-grid .meta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.post-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 44rem) 14rem;
+  justify-content: center;
+  gap: 3rem;
+  padding: 0 clamp(1rem, 4vw, 2rem);
+}
+
+.post-layout .article {
+  max-width: none;
+  padding: 3rem 0 5rem;
+}
+
+.lede {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.toc {
+  position: sticky;
+  top: 5rem;
+  align-self: start;
+  padding-top: 4.2rem;
+  font-size: 0.85rem;
+}
+
+.toc strong {
+  display: block;
+  margin-bottom: 0.6rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 1px solid var(--border);
+}
+
+.toc li {
+  margin: 0.15rem 0;
+}
+
+.toc li.sub {
+  padding-left: 0.8rem;
+}
+
+.toc a {
+  color: var(--text-dim);
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
+}
+
+.toc a:hover,
+.toc a.current {
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .post-layout {
+    grid-template-columns: minmax(0, 44rem);
+  }
+  .toc {
+    display: none;
+  }
+}
+
+.prevnext {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 3rem;
+}
+
+.prevnext a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-decoration: none;
+}
+
+.prevnext a:hover {
+  border-color: var(--accent);
+}
+
+.prevnext .next {
+  text-align: right;
+}
+
+.prevnext small {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+}
+
+.ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.ask button {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.ask button:hover {
+  border-color: var(--accent-2);
+  transform: translateY(-1px);
+}
+
+.ask button::before {
+  content: '✦ ';
+  color: var(--accent-2);
+}
