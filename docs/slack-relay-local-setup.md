@@ -1,3 +1,9 @@
+---
+title: Running slack-relay on a Mac mini
+sidebar_label: Local setup
+sidebar_position: 2
+---
+
 # Running slack-relay on a Mac mini (24h)
 
 How to install `slack-relay` and keep it running all day on one machine. Source: `https://github.com/dai-3235/skills/tree/main/slack-relay`.
