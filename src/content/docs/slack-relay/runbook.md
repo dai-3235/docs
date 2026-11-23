@@ -26,15 +26,20 @@ Items marked **unverified** were reasoned from the code or from how the tools no
 
 ```mermaid
 flowchart TD
-  L["launchd<br/>ai.slack-relay"] -->|RunAtLoad, KeepAlive| R["run-24h.sh"]
+  classDef human stroke-width:1.3px
+  classDef store stroke-width:1.3px
+  classDef ops stroke-width:1.3px
+  classDef risk stroke-width:1.3px
+  L["launchd<br/>ai.slack-relay"]:::ops -->|"RunAtLoad, KeepAlive"| R["run-24h.sh"]
   R --> S["screen -DmS slack-relay"]
   S --> O["relay-on 24 10m"]
-  O -->|whoami fails| X["exit 1, launchd restarts after 60 s"]
-  O --> C["caffeinate -dims"]
+  O -->|"whoami fails"| X["exit 1<br/>launchd restarts after 60 s"]:::risk
+  O --> C["caffeinate -dims"]:::ops
   O --> CC["claude --name slack-relay<br/>dispatch skill, 24 h"]
-  CC -->|loop| W["slack.py wait"]
-  CC -->|window over or crash| X2["process exits"]
+  CC -->|loop| W[/"slack.py wait"/]:::store
+  CC -->|"window over or crash"| X2["process exits"]:::risk
   X2 --> L
+  X --> L
 ```
 
 `relay-on` ends after 24 hours, then launchd starts a fresh window. The `10m` catch-up makes the new window pick up messages from the gap.

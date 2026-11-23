@@ -1,0 +1,64 @@
+---
+const accents = [
+  { id: 'violet', label: 'Violet', a: '#8b6cff', b: '#22d3ee' },
+  { id: 'ocean', label: 'Ocean', a: '#3b8cff', b: '#2dd4bf' },
+  { id: 'forest', label: 'Forest', a: '#2eb67d', b: '#a3e635' },
+  { id: 'sunset', label: 'Sunset', a: '#fb7a3c', b: '#f43f5e' },
+];
+---
+
+<div class="appearance">
+  <details>
+    <summary aria-label="Choose accent colour"><span class="swatch current-swatch"></span></summary>
+    <div class="appearance-menu">
+      {accents.map((a) => (
+        <button type="button" data-accent={a.id} aria-pressed="false">
+          <span class="swatch" style={`--sw-a:${a.a};--sw-b:${a.b}`}></span>
+          {a.label}
+        </button>
+      ))}
+    </div>
+  </details>
+  <button type="button" class="appearance-mode" aria-label="Toggle light and dark mode">◐</button>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const swatches: Record<string, [string, string]> = {
+    violet: ['#8b6cff', '#22d3ee'],
+    ocean: ['#3b8cff', '#2dd4bf'],
+    forest: ['#2eb67d', '#a3e635'],
+    sunset: ['#fb7a3c', '#f43f5e'],
+  };
+
+  function paint() {
+    const current = root.dataset.accent ?? 'violet';
+    const [a, b] = swatches[current] ?? swatches.violet;
+    document.querySelectorAll<HTMLElement>('.current-swatch').forEach((el) => {
+      el.style.setProperty('--sw-a', a);
+      el.style.setProperty('--sw-b', b);
+    });
+    document.querySelectorAll<HTMLButtonElement>('.appearance-menu button').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.accent === current));
+    });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.appearance-menu button').forEach((button) =>
+    button.addEventListener('click', () => {
+      root.dataset.accent = button.dataset.accent;
+      localStorage.setItem('accent', button.dataset.accent ?? 'violet');
+      paint();
+      button.closest('details')?.removeAttribute('open');
+    }),
+  );
+
+  document.querySelectorAll('.appearance-mode').forEach((button) =>
+    button.addEventListener('click', () => {
+      const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      localStorage.setItem('starlight-theme', next);
+    }),
+  );
+
+  paint();
+</script>
