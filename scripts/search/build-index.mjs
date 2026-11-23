@@ -79,11 +79,77 @@ function recordsFor(file, html) {
   return sections
     .map((s) => {
       if (s.level === 2) parent = s.heading;
-      const text = s.parts.join(' ').slice(0, MAX_TEXT);
+      const full = s.parts.join(' ');
+      const text = full.slice(0, MAX_TEXT);
       const section = s.level === 3 && parent ? `${parent} › ${s.heading}` : s.heading;
-      return { url: s.anchor ? `${url}#${s.anchor}` : url, title, section, crumbs, kind, text };
+      const words = full.split(/\s+/).filter(Boolean).length;
+      return { url: s.anchor ? `${url}#${s.anchor}` : url, title, section, crumbs, kind, text, words };
     })
     .filter((r) => r.text || r.section);
+}
+
+function pageOf(url) {
+  return url.split('#')[0];
+}
+
+function buildPages(records, mini, vectors, scales) {
+  const pages = new Map();
+  records.forEach((r, i) => {
+    const key = pageOf(r.url);
+    const page = pages.get(key) ?? { url: key, title: r.title, kind: r.kind, words: 0, rows: [] };
+    page.words += r.words;
+    page.rows.push(i);
+    pages.set(key, page);
+  });
+
+  const centroid = (page) => {
+    const sum = new Float32Array(DIMS);
+    for (const row of page.rows) {
+      for (let k = 0; k < DIMS; k++) sum[k] += vectors[row * DIMS + k] * scales[row];
+    }
+    let norm = 0;
+    for (const x of sum) norm += x * x;
+    norm = Math.sqrt(norm) || 1;
+    return sum.map((x) => x / norm);
+  };
+
+  const list = [...pages.values()];
+  if (vectors) list.forEach((page) => (page.vec = centroid(page)));
+
+  const out = {};
+  for (const page of list) {
+    let ranked;
+    if (vectors) {
+      ranked = list
+        .filter((other) => other.url !== page.url)
+        .map((other) => {
+          let dot = 0;
+          for (let k = 0; k < DIMS; k++) dot += page.vec[k] * other.vec[k];
+          return { other, score: dot };
+        })
+        .sort((a, b) => b.score - a.score);
+    } else {
+      const query = page.rows.map((row) => records[row].section).filter(Boolean).join(' ') || page.title;
+      const seen = new Set([page.url]);
+      ranked = [];
+      for (const hit of mini.search(query, { combineWith: 'OR', prefix: true })) {
+        const url = pageOf(hit.url);
+        if (seen.has(url)) continue;
+        seen.add(url);
+        ranked.push({ other: pages.get(url), score: hit.score });
+      }
+    }
+    out[page.url] = {
+      title: page.title,
+      kind: page.kind,
+      minutes: Math.max(1, Math.round(page.words / 200)),
+      related: ranked
+        .filter((r) => r.other)
+        .slice(0, 4)
+        .map((r) => ({ url: r.other.url, title: r.other.title, kind: r.other.kind, score: Number(r.score.toFixed(3)) })),
+    };
+  }
+  return out;
 }
 
 async function embed(records) {
@@ -116,7 +182,7 @@ async function copyRuntime() {
   const transformersDir = path.join(ROOT, 'node_modules', '@huggingface', 'transformers');
   await copyFile(path.join(transformersDir, 'dist', 'transformers.min.js'), path.join(runtime, 'transformers.min.js'));
   const ortDir = path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist');
-  for (const name of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
+  for (const name of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']) {
     await copyFile(path.join(ortDir, name), path.join(runtime, name));
   }
   for (const name of MODEL_FILES) {
@@ -136,16 +202,20 @@ await mkdir(OUT, { recursive: true });
 await writeFile(path.join(OUT, 'index.json'), JSON.stringify(mini));
 
 const manifest = { version: Date.now().toString(36), count: records.length, semantic: null };
+let embedded = null;
 if (process.env.SEARCH_SEMANTIC !== '0') {
   try {
-    const { vectors, scales } = await embed(records);
-    await writeFile(path.join(OUT, 'vectors.bin'), Buffer.from(vectors.buffer));
-    await writeFile(path.join(OUT, 'scales.bin'), Buffer.from(scales.buffer));
+    embedded = await embed(records);
+    await writeFile(path.join(OUT, 'vectors.bin'), Buffer.from(embedded.vectors.buffer));
+    await writeFile(path.join(OUT, 'scales.bin'), Buffer.from(embedded.scales.buffer));
     await copyRuntime();
     manifest.semantic = { model: MODEL, dims: DIMS, dtype: 'q8' };
   } catch (err) {
+    embedded = null;
     console.warn(`Semantic search skipped: ${err.message}`);
   }
 }
+const pages = buildPages(records, mini, embedded?.vectors, embedded?.scales);
+await writeFile(path.join(OUT, 'pages.json'), JSON.stringify(pages));
 await writeFile(path.join(OUT, 'manifest.json'), JSON.stringify(manifest));
 console.log(`Search index: ${records.length} sections, semantic ${manifest.semantic ? 'on' : 'off'}`);

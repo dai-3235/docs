@@ -1,11 +1,18 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
+import { tagCounts, tagSlug, publishedPosts, readingMinutes, formatDate } from '../lib/blog';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const posts = (await getCollection('blog', ({ data }) => !data.draft))
-  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 4);
+const all = await publishedPosts();
+const posts = all.slice(0, 4);
+const tags = tagCounts(all).slice(0, 8);
+const questions = [
+  'How do I control a coding agent from my phone?',
+  'What can go wrong with this setup?',
+  'How would this scale to a team?',
+  'What do I do when it stops responding?',
+];
 const docs = await getCollection('docs');
 
 const cards = [
@@ -53,6 +60,11 @@ const cards = [
   </section>
 
   <section class="section">
+    <h2>Ask in plain language</h2>
+    <div class="ask">
+      {questions.map((q) => <button type="button" data-search-query={q}>{q}</button>)}
+    </div>
+
     <h2>Start here</h2>
     <div class="cards">
       {cards.map((c) => (
@@ -108,12 +120,17 @@ const cards = [
               <a href={`${base}/blog/${p.id}/`}>
                 <span>{p.data.title}</span>
                 <time datetime={p.data.pubDate.toISOString()}>
-                  {p.data.pubDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  {formatDate(p.data.pubDate)} · {readingMinutes(p)} min
                 </time>
               </a>
             </li>
           ))}
         </ul>
+        {tags.length > 0 && (
+          <div class="topics" style="margin-top:1.2rem">
+            {tags.map(([tag, count]) => <a href={`${base}/blog/tags/${tagSlug(tag)}/`}>#{tag} <small>{count}</small></a>)}
+          </div>
+        )}
       </>
     )}
   </section>

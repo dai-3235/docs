@@ -7,11 +7,15 @@ import Appearance from '../components/Appearance.astro';
 interface Props {
   title: string;
   description?: string;
+  image?: string;
+  type?: 'website' | 'article';
 }
 
-const { title, description = 'System designs, runbooks and technical writing.' } = Astro.props;
+const { title, description = 'System designs, runbooks and technical writing.', image, type = 'website' } = Astro.props;
+const site = 'https://dai-3235.github.io';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const path = Astro.url.pathname;
+const ogImage = new URL(image ?? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/og/default.png`, site).href;
 const links = [
   { href: `${base}/slack-relay/overview/`, label: 'Docs', active: path.includes('/slack-relay/') },
   { href: `${base}/blog/`, label: 'Blog', active: path.includes('/blog/') },
@@ -26,6 +30,13 @@ const links = [
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+    <link rel="alternate" type="application/rss+xml" title="Engineering Notes" href={`${base}/rss.xml`} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, site).href} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={type} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
     <script is:inline>
       const stored = localStorage.getItem('starlight-theme');
       document.documentElement.dataset.theme =
@@ -55,6 +66,7 @@ const links = [
     </footer>
     <script>
       import '../scripts/diagrams';
+      import '../scripts/enhance';
     </script>
   </body>
 </html>
