@@ -741,3 +741,71 @@ export const ingestFlow: FlowDefinition = {
     table: { x: 480, y: 140 },
   },
 };
+
+export const hedgeFundFlow: FlowDefinition = {
+  nodes: [
+    {
+      id: 'data',
+      title: 'Point-in-time data',
+      subtitle: 'Prices, fundamentals, earnings',
+      detail: 'Market data from the Financial Datasets API, filtered by filing date so a backtest never sees a number before it was public.',
+      kind: 'store',
+      icon: 'database',
+    },
+    {
+      id: 'views',
+      title: 'Views',
+      subtitle: 'Investor personas and a quant model',
+      detail: 'LLM agents modelled on Buffett, Munger, Graham, Lynch and Druckenmiller each form a view. A quant model for post-earnings drift forms one without a persona. Every view is a signal between -1 and +1.',
+      kind: 'core',
+      icon: 'bot',
+    },
+    {
+      id: 'portfolio',
+      title: 'Portfolio',
+      subtitle: 'Blend views into weights',
+      detail: 'Views are blended into conviction-weighted target weights, optionally market-neutral. This step is plain code, not a model.',
+      kind: 'core',
+      icon: 'table',
+    },
+    {
+      id: 'risk',
+      title: 'Risk limits',
+      subtitle: 'Hard clamps',
+      detail: 'Per-position and gross-exposure clamps, plus a master risk check on the netted book. These are gates, and the model cannot argue with them.',
+      kind: 'risk',
+      icon: 'shield',
+    },
+    {
+      id: 'broker',
+      title: 'Simulated broker',
+      subtitle: 'Fills at the next close',
+      detail: 'A decision made in one session executes at the next close, with half-spread and commission costs. Live brokers are listed as planned.',
+      kind: 'service',
+      icon: 'send',
+    },
+    {
+      id: 'ledger',
+      title: 'Ledger',
+      subtitle: 'Paper or backtest record',
+      detail: 'A session record per step, an equity curve against a benchmark for backtests, and a paper-trading ledger with an approval step and a kill switch.',
+      kind: 'store',
+      icon: 'folder',
+    },
+  ],
+  edges: [
+    { from: 'data', to: 'views' },
+    { from: 'views', to: 'portfolio' },
+    { from: 'portfolio', to: 'risk', via: ['b', 't'] },
+    { from: 'risk', to: 'broker', via: ['sl', 'rt'] },
+    { from: 'broker', to: 'ledger', via: ['sl', 'rt'] },
+  ],
+  wide: {
+    data: { x: 0, y: 0 },
+    views: { x: 240, y: 0 },
+    portfolio: { x: 480, y: 0 },
+    risk: { x: 480, y: 140 },
+    broker: { x: 240, y: 140 },
+    ledger: { x: 0, y: 140 },
+  },
+};
