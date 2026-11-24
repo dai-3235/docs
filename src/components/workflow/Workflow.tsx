@@ -70,6 +70,8 @@ function Card({ data }: NodeProps<Node<CardData>>) {
       </span>
       <Handle type="source" position={Position.Bottom} id="b" className="wf-handle" />
       <Handle type="source" position={Position.Right} id="r" className="wf-handle" />
+      <Handle type="source" position={Position.Left} id="sl" className="wf-handle" />
+      <Handle type="target" position={Position.Bottom} id="tb" className="wf-handle" />
     </div>
   );
 }
@@ -161,8 +163,8 @@ function Canvas({ flow, title, height }: Props) {
           id: `${e.from}-${e.to}`,
           source: e.from,
           target: e.to,
-          sourceHandle: vertical ? (to - from > 1 ? 'r' : 'b') : 'r',
-          targetHandle: vertical ? (to - from > 1 ? 'rt' : 't') : 'l',
+          sourceHandle: vertical ? (to - from > 1 ? 'r' : 'b') : (e.via?.[0] ?? 'r'),
+          targetHandle: vertical ? (to - from > 1 ? 'rt' : 't') : (e.via?.[1] ?? 'l'),
           type: 'smoothstep',
           pathOptions: { borderRadius: 14 },
           label: e.label,
