@@ -1,0 +1,153 @@
+---
+title: "Inside lance-context: one storage engine for agent memory and RL rollouts"
+description: "How lance-context stores agent memory and RL training data on Lance: the data model, the write path, background maintenance, fencing, and a replicated ingest path."
+pubDate: 2026-11-24
+kind: technical
+tags: [lance, storage, agents, architecture]
+draft: false
+---
+
+import Workflow from '../../components/workflow/Workflow';
+import { rolloutLoopFlow, layersFlow, writePathFlow, controlPlaneFlow, mergeFenceFlow, ingestFlow } from '../../data/workflows';
+
+[lance-context](https://github.com/lance-format/lance-context) is an open-source storage engine for the data that AI systems produce: the running memory of an agent, and the trajectories an RL training run generates. It is built on [Lance](https://lancedb.github.io/lance/), a columnar, versioned table format on object storage.
+
+This post is a tour of the architecture. It follows the design documents and the code in the repository: what problem each layer solves, how it works, and what the project is careful about. Where something is a proposal or an experiment rather than the default path, the post says so.
+
+## The problem
+
+AI systems produce two kinds of data that fit badly into the usual stack.
+
+**Agent memory** is the history of a conversation or an agent run: text, images, tool calls and their embeddings. You append to it all the time, search it by meaning and by metadata to recall context, and sometimes need to go back to an earlier state.
+
+**RL rollouts** are the trajectories produced when you train with methods like GRPO, RLVR or PPO. A policy answers a prompt, often over several turns with tool calls, a grader scores the result, and the scored trajectory becomes a training example. Thousands of workers write concurrently, and one learner reads.
+
+<Workflow client:visible flow={rolloutLoopFlow} title="RL data loop" height={340} />
+
+The usual answer is several systems stitched together: a vector database for recall, an object store for blobs, a warehouse for training data, and a streaming pipeline between them. That causes three recurring problems.
+
+- **Reproducibility is expensive.** To say exactly which rollouts trained which checkpoint, you need cheap snapshots of the whole dataset. Warehouses with many joined tables do not give you that.
+- **The hot path reads too much.** A learner needs tokens, logprobs and advantage for millions of rows. A row-oriented layout drags text, artifacts and grader logs along with it.
+- **Writes fan out.** A trajectory split across several tables needs reassembly, and a partial write leaves a broken trajectory.
+
+lance-context takes the opposite position: one versioned columnar table per store, one atomic append per trajectory, and search, filtering and time travel on that same table.
+
+## The architecture in one picture
+
+<Workflow client:visible flow={layersFlow} title="Layers" height={340} />
+
+Everything durable lives in object storage. The Rust engine is embedded in your process, or runs behind an HTTP server. An optional control plane keeps many tables healthy in the background.
+
+The layering is deliberate. A store such as `RolloutStore` or `ContextStore` is only a schema plus an encode and decode pair. `StorageBase` owns everything that is not schema-specific, so every store gets the same answers to the same hard questions: how a write becomes durable, when it becomes visible, how it is merged, and how reads see both merged and unmerged rows. Applications with their own schema use `StorageBase` directly and bring a merge key.
+
+## The data model: two schemas, one engine
+
+The two use cases get two separate schemas. Rollout signals are first-class, high-volume data, so they get typed columns of their own instead of being squeezed into a metadata blob.
+
+| | `ContextRecord` (agent memory) | `RolloutRecord` (RL) |
+|---|---|---|
+| Identity | id, run, bot, session, tenant | id, rollout, problem (the group of samples for one prompt), explicit sequence order |
+| Content | role, text, binary payload, a reference to an object outside the table | role, content, oversized message parts as separate columns |
+| Signals | embedding vector, relationships | token arrays, logprobs, loss mask, advantage, reward, grader |
+| Lifecycle | expiry, retention, retired and superseded links | include in training, exclude reason, policy version |
+
+Three choices make this work.
+
+**Columnar projection.** The learner reads only the token, logprob and advantage columns. Text and artifacts are other columns, so they are never touched on that scan.
+
+**Snapshots as the unit of reproducibility.** Every write creates an immutable version. `checkout(version)` recovers an exact set of rows, so the set a checkpoint trained on can be named and replayed.
+
+**Rows carry what you need to filter.** Fields such as policy version and training inclusion are ordinary columns, so selecting a training set is a filter, not a pipeline.
+
+The same engine also serves other shapes. `GenericStore` takes an application-owned schema, and `DocumentStore` takes JSON and shreds common scalar values into typed columns automatically, leaving the rest as residual JSON. Selection is by how often a path occurs or how many bytes it carries, and the layout only ever grows.
+
+## The write path
+
+The hard part of high fan-in ingest is that many writers must append to one dataset without a lock service. lance-context uses Lance's MemWAL: each writer owns a shard, and appends go first to a write-ahead log shard stored beside the base table, then are merged in the background.
+
+<Workflow client:visible flow={writePathFlow} title="Write and read" height={340} />
+
+**Single writer per shard, by construction.** A shard manifest advances by compare-and-set with an epoch, so if two writers ever target the same shard, exactly one wins and the other is fenced. The server avoids ever needing that: the shard id is a pure function of the stable instance id. In a Kubernetes StatefulSet the pod name already is one, so no two instances share a shard, whatever the load balancer does. The fence is a backstop against misconfiguration, not the normal path.
+
+**Durable first, visible second.** An append is durable when it returns. When it becomes visible to readers is a separate decision, controlled by an explicit flush, so concurrent appends are not serialized behind one seal and drain. The cost is stated plainly in the design: a plain append gives no read-your-write guarantee unless the caller flushes.
+
+**Reads see everything.** The read path builds a scanner over the base table plus every shard generation that is not yet merged. A read runs inside a callback that registers a temporary reader, so the files it needs are protected while it runs, and the callback may be retried and must be free of side effects.
+
+**Merge is surgical.** Merging drains only the generations it actually merged, reuses the shard's current epoch so it never fences a live writer, and deletes generation directories only after the manifest drain. Compaction defers index remapping, because the WAL index would otherwise break Lance's inline remap.
+
+## Keeping many tables healthy
+
+A single table can look after itself. A deployment with a long tail of tables, most cold and a few hot, needs a control plane. The master process runs four kinds of maintenance: merging WAL generations, compaction, building a key index, and repair. They are long, few and memory-hungry, so placement and capacity matter more than scheduling latency.
+
+<Workflow client:visible flow={controlPlaneFlow} title="Control plane" height={340} />
+
+The design went through a hard lesson that the docs record openly. Maintenance had grown into many independent loops feeding one queue, each with its own pacing, filtering and backoff, and the result was that nobody could say which component would act on a table next, or why. Most of a stretch of merged fixes were about that layer. The direction since is one owner of "what runs next":
+
+- **A leader-owned demand controller.** One elected leader (an etcd lease) holds each table's demand in memory, fed by push signals and one reconciling scan. Followers watch the leader key and stop scanning.
+- **Capacity-backed dispatch.** Executors advertise free slots and memory as leased tickets. The controller matches work to a ticket and publishes one offer, which the executor accepts in a single transaction. No controller means waiting, never a fallback scan.
+- **Progress, not liveness, decides stuck.** A live lease, a heartbeat or a long run time is not evidence either way. The only authoritative signal is the execution's completed-work sequence, and only the watchdog may declare a stall.
+
+The unified scheduler is described in the repository as a design under validation, so treat the controller and dispatch layers as the shipped parts and the full planner as the direction.
+
+### The fence: one publisher, even through crashes
+
+Scheduling decides what to run and where. Correctness comes from a separate fence in the merge crate, and the scheduler is deliberately not allowed to touch it.
+
+<Workflow client:visible flow={mergeFenceFlow} title="Commit recovery" height={340} />
+
+The hard case is an executor that stops responding mid-commit. A timeout alone cannot hand the table over: the old process or the object store may still be committing. So the design makes the unknown outcome a first-class state. Every commit needs a permit that records the highest version the worker might write. When an outcome is ambiguous the execution keeps ownership as Uncertain. To recover, the master closes admission, then advances the base and shard manifests past every admitted version with metadata-only conditional writes. A delayed old write can then no longer land, and no payload is scanned or live writer fenced.
+
+## A replicated ingest path
+
+The server-owned shard model is simple and works behind any load balancer, but a shard lives with its instance. The project also builds a second path, aimed at ingest that must survive node loss: a replicated write-ahead log in front of the Lance table.
+
+<Workflow client:visible flow={ingestFlow} title="Replicated ingest" height={340} />
+
+Each part answers a specific failure.
+
+- **Quorum acknowledgement.** The log uses Raft over fixed groups of three voters. An append is acknowledged only after a majority replicated it and the local durable commit boundary was reached. A storage error fences every group sharing the engine, and the node returns no partial acknowledgement.
+- **Unknown is an answer.** Losing leadership returns an unknown outcome for requests in flight. It does not claim they were rejected, because their entries may still commit. Recovery reconciles the same producer identity instead of assuming a failure.
+- **Exact retry.** A producer has a generation and a sequence. The recoverable client journals the exact body before sending and the acknowledgement before advancing, and after any uncertainty it resends the same intent. A different body can never replace an unresolved one.
+- **Accepted is not visible.** The gateway answers 202 with a durable receipt, without waiting for the Lance table. A separate query turns a receipt into the minimum Lance version that contains it.
+- **A lease is not a fence.** A materializer claims a table through an expiring etcd lease, but publication safety comes from the publisher epoch. The order matters: read the epoch, then check the claim, then acquire conditionally on the epoch. Reversing the first two would let a paused old owner steal the table back.
+- **The catalog chooses the manifest.** A publisher epoch checked before a blob write cannot revoke a write already in flight. So each publication reserves one immutable staging path through the same quorum, and readers resolve versions from the catalog, never from a directory listing.
+
+The repository describes this as an embeddable component that is qualified by process tests (leader kill, full restarts, interrupted snapshots, exact retries and complete payload checks) and not yet the default ingestion path. Some of its options are labelled candidates, not established improvements, until a same-binary performance comparison exists.
+
+## What else is in the box
+
+Smaller pieces that matter in practice:
+
+- **Annotations.** Late labels, status and scores for an existing rollout table are applied through an owner role as narrow columns, with ordered apply and an offline handoff of a quiesced source, so they never rewrite the wide body columns.
+- **Registry.** A name-to-table registry can move from Lance to etcd through a versioned mirror, with tombstones so a delayed write cannot resurrect a deleted entry.
+- **Partitioned namespaces and consolidation.** Two documents propose scoped isolation as a partitioned Lance namespace over one schema, and an offline "auto-dream" pass that summarizes redundant memories and retires them without deleting. Both are drafts.
+
+| Area | State |
+|---|---|
+| Context and rollout stores, versioning, search | the core, with Python and Rust APIs |
+| Server-owned shards and the maintenance control plane | in use, still being tightened |
+| Replicated WAL ingest | a qualified component, not the default path |
+| Unified scheduler, partitioned namespaces, consolidation | design proposals |
+
+## What the project cares about
+
+Reading the design documents end to end, the same values come up again and again.
+
+- **Unknown outcomes are first-class.** Timeouts, lost replies, cancelled waits and leadership changes produce an uncertain result that is reconciled, never a guess. Retries reuse the original identity.
+- **Fence before you trust.** Epochs, permits and manifest barriers decide who may write. A lease, a heartbeat or a ready pod never does.
+- **Everything is bounded.** Admission, memory, request sizes, deadlines and queue credits all have limits, and data and control traffic have separate lanes so one cannot starve the other.
+- **Say what is not proven.** The documents repeat what a feature does not guarantee: a local journal completion is not a quorum acknowledgement, an observation is not a p99, an option is a candidate and not a speedup.
+- **Compatibility is explicit.** Format versions advance with the changes that need them, and the documents state when a rollout is not mixed-version safe.
+
+## Trade-offs
+
+- **Blob payloads are stored inline in the rollout store.** At the time of the design note, reads go through the combined scanner, which has no step to materialize Lance's offloaded blob columns, so blob columns would read back empty. The cost is that large payloads sit in memory at each hop, which the project bounds with budgets and streams on download.
+- **No read-your-write by default.** Visibility is a separate step from durability.
+- **A real control plane is real complexity.** It needs etcd, leases, fences and runbooks. The project's own history shows how much effort that layer absorbs.
+- **One writer per shard.** Scaling out means more shards, not more writers on one shard.
+
+## When to use it
+
+Use it when you want agent memory or RL data in one versioned table with built-in search, on object storage you already have, and you value being able to name the exact snapshot a result came from. Start embedded. Add the server when several processes write, and the control plane only when the number of tables makes background maintenance a job in itself.
+
+Skip it if a single vector index is all you need, or if your data is small enough that one database already holds it comfortably.
