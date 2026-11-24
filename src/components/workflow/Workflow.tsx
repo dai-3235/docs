@@ -13,7 +13,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { graphlib, layout } from '@dagrejs/dagre';
-import { Bot, FolderGit2, Hand, MessageSquare, Maximize2, Minimize2, Pause, Play, Radio, Send, ShieldCheck, Smartphone, SkipForward, UserCheck, ZoomIn, ZoomOut, ScanLine } from 'lucide-react';
+import { Bot, Database, FolderGit2, Gauge, Hand, Layers, RefreshCw, Route, Table2, MessageSquare, Maximize2, Minimize2, Pause, Play, Radio, Send, ShieldCheck, Smartphone, SkipForward, UserCheck, ZoomIn, ZoomOut, ScanLine } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './workflow.css';
 import type { FlowDefinition, FlowIcon, FlowKind } from '../../data/workflows';
@@ -43,6 +43,12 @@ const icons: Record<FlowIcon, typeof Bot> = {
   folder: FolderGit2,
   approve: UserCheck,
   send: Send,
+  database: Database,
+  route: Route,
+  gauge: Gauge,
+  layers: Layers,
+  table: Table2,
+  refresh: RefreshCw,
 };
 
 const SIZE = { wide: { width: 190, height: 68 }, tall: { width: 232, height: 64 } };

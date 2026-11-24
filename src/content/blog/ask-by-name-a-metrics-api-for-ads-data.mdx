@@ -1,6 +1,6 @@
 ---
-title: "A lean semantic API for ads data"
-description: "One central service that turns business-named metric requests into SQL for ads data consumers: join rules, derived metrics, template queries, and how it scales on demand."
+title: "Ask by name: a metrics API for ads data"
+description: "A central API where consumers ask for ads metrics by name and the gateway picks the tables and the cheapest safe join route, with templates for complex queries."
 pubDate: 2026-11-23
 kind: technical
 tags: [semantic-layer, ads, architecture]
@@ -8,6 +8,8 @@ draft: false
 ---
 
 import JoinPathDemo from '../../components/joindemo/JoinPathDemo';
+import Workflow from '../../components/workflow/Workflow';
+import { gatewayFlow, routeChoiceFlow, feedbackLoopFlow } from '../../data/workflows';
 
 The datasets already exist. Event logs, clicks, conversions, spend and billing all land in a warehouse. The problem is not storage. It is that every dashboard, export, notebook and service writes its own SQL against them, so the same number, say impressions last week, comes out three different ways.
 
@@ -36,6 +38,10 @@ A request names metrics, breakdowns, a filter and a time range. The gateway turn
 | 2. Rich join query | metrics + breakdowns that live on different tables | find the join route, join, aggregate | join rules |
 | 3. Derived metrics | ratios and differences of base metrics | compute from base metrics after aggregating | metric formulas |
 | 4. Template query | a named query with parameters | render a reviewed CTE template, run it | a template in the repo |
+
+The path of one request through the gateway, from the question to the engines:
+
+<Workflow client:visible flow={gatewayFlow} title="One request through the gateway" height={360} />
 
 Each tier adds machinery only when the one below cannot answer. Most traffic stays in tier 1 and 2. That is what keeps the service lean: the complex path exists, but it is not the default path.
 
@@ -115,11 +121,7 @@ What the search needs to minimize is not the number of joins but the **risk** of
 
 Take a concrete request: total `spend` by `sponsor`. The metric lives on `ad_event_fact`, the dimension on `sponsor_dim`. The model has three ways to get there.
 
-```text
-ad_event_fact ──event_to_sponsor_shortcut──────────────────────────► sponsor_dim
-ad_event_fact ─► placement_dim ─► promotion_dim ───────────────────► sponsor_dim
-ad_event_fact ─► banner_dim ═(banner rotation, many-to-many)═► placement_dim ─► promotion_dim ─► sponsor_dim
-```
+<Workflow client:visible flow={routeChoiceFlow} title="Three ways from an event to a sponsor" height={400} />
 
 Each route is scored by adding up its joins. A join contributes its declared cost, one fan-out if it multiplies rows in the direction walked, and one join.
 
@@ -392,6 +394,8 @@ Stage 6 is where the design pays off. Because consumers ask by name, adding a fa
 Ads is a loop. Promotions are configured, ads are served, results are measured, and the measurement changes the next decision. If reporting and serving read different definitions of the same metric, the loop is built on two truths.
 
 The gateway can be the single source of truth for the **control plane** of that loop, the decisions that run on seconds-to-minutes timescales: spend throttling, frequency capping, bid adjustments, alerts when spend falls behind plan. It should not sit in the **data plane**: the auction decision at request time has a latency budget a SQL gateway cannot meet. That path reads precomputed values from a low-latency store, and those values are produced from the same logical definitions.
+
+<Workflow client:visible flow={feedbackLoopFlow} title="The feedback loop" height={380} />
 
 Minimal-effort feedback looks like this:
 
