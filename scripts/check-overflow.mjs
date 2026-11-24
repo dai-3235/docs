@@ -157,6 +157,19 @@ const MEASURE = `(() => {
   return { innerWidth: width, scrollWidth: document.documentElement.scrollWidth, widest }
 })()`
 
+const OVERLAY_SWEEP = `(async () => {
+  const widths = []
+  for (const button of document.querySelectorAll('button[title="Full screen"]')) {
+    button.scrollIntoView({ block: 'center', behavior: 'instant' })
+    button.click()
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    widths.push(document.documentElement.scrollWidth)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  return widths
+})()`
+
 async function measure(session, port, pagePath, width) {
   await session.send('Emulation.setDeviceMetricsOverride', {
     width,
@@ -168,7 +181,9 @@ async function measure(session, port, pagePath, width) {
   await session.send('Page.navigate', { url: `http://127.0.0.1:${port}${pagePath}` })
   await loaded
   await session.evaluate(SCROLL_THROUGH)
-  return session.evaluate(MEASURE)
+  const result = await session.evaluate(MEASURE)
+  result.overlayWidths = await session.evaluate(OVERLAY_SWEEP)
+  return result
 }
 
 const pages = pagesIn(DIST)
@@ -191,10 +206,11 @@ try {
     for (const width of WINDOW_WIDTHS) {
       const result = await measure(session, serverPort, pagePath, width)
       const fixedWindow = result.innerWidth === width
-      const fits = result.scrollWidth <= width
-      console.log(`${fits && fixedWindow ? 'ok  ' : 'FAIL'} ${String(width).padStart(3)} px  scrollWidth ${String(result.scrollWidth).padStart(4)}  ${pagePath}`)
+      const worstWidth = Math.max(result.scrollWidth, ...result.overlayWidths)
+      const fits = worstWidth <= width
+      console.log(`${fits && fixedWindow ? 'ok  ' : 'FAIL'} ${String(width).padStart(3)} px  scrollWidth ${String(worstWidth).padStart(4)}  ${pagePath}`)
       if (!fixedWindow) failures.push(`${pagePath} at ${width}: window was ${result.innerWidth}, not a fixed-width window`)
-      else if (!fits) failures.push(`${pagePath} at ${width}: scrollWidth ${result.scrollWidth}, widest ${result.widest.join(', ') || 'unknown'}`)
+      else if (!fits) failures.push(`${pagePath} at ${width}: scrollWidth ${worstWidth} (${result.overlayWidths.length} overlays opened), widest ${result.widest.join(', ') || 'unknown'}`)
     }
   }
 } finally {
