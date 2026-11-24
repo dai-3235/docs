@@ -195,13 +195,13 @@ test('hop limit falls back to a costlier shorter route', () => {
 
 test('a table joined under two roles is not treated as visited', () => {
   const joinRules = [
-    rule('buyer', 'brand', 'agency', { toRole: 'buying_agency', cost: 1 }),
-    rule('biller', 'brand', 'agency', { toRole: 'billing_agency', cost: 3 }),
-    rule('billing_to_region', 'agency', 'region', { fromRole: 'billing_agency', cost: 1 }),
+    rule('buyer', 'brand', 'partner', { toRole: 'buying_partner', cost: 1 }),
+    rule('biller', 'brand', 'partner', { toRole: 'billing_partner', cost: 3 }),
+    rule('billing_to_region', 'partner', 'region', { fromRole: 'billing_partner', cost: 1 }),
   ]
   const result = findRoute({ joinRules, from: 'brand', to: 'region' })
   assert.deepEqual(ruleIds(result), ['biller', 'billing_to_region'])
-  assert.equal(result.route[0].role, 'billing_agency')
+  assert.equal(result.route[0].role, 'billing_partner')
   assert.equal(result.totalCost, 4)
 })
 
@@ -227,22 +227,22 @@ test('a route revisiting the start table under a new role is allowed', () => {
 
 const modelCases = [
   {
-    name: 'model: delivery reaches campaign through line item',
-    from: 'ad_delivery_fact',
-    to: 'campaign_dim',
-    expectedRules: ['delivery_to_line_item', 'line_item_to_campaign'],
+    name: 'model: event reaches promotion through placement',
+    from: 'ad_event_fact',
+    to: 'promotion_dim',
+    expectedRules: ['event_to_placement', 'placement_to_promotion'],
   },
   {
-    name: 'model: shortcut beats the three-join chain to advertiser',
-    from: 'ad_delivery_fact',
-    to: 'advertiser_dim',
-    expectedRules: ['delivery_to_advertiser_shortcut'],
+    name: 'model: shortcut beats the three-join chain to sponsor',
+    from: 'ad_event_fact',
+    to: 'sponsor_dim',
+    expectedRules: ['event_to_sponsor_shortcut'],
   },
   {
-    name: 'model: creative is reached directly rather than through many-to-many',
-    from: 'ad_delivery_fact',
-    to: 'creative_dim',
-    expectedRules: ['delivery_to_creative'],
+    name: 'model: banner is reached directly rather than through many-to-many',
+    from: 'ad_event_fact',
+    to: 'banner_dim',
+    expectedRules: ['event_to_banner'],
   },
 ]
 
@@ -252,25 +252,25 @@ for (const { name, from, to, expectedRules } of modelCases) {
   })
 }
 
-test('model: disabling the shortcut routes advertiser through campaign', () => {
+test('model: disabling the shortcut routes sponsor through promotion', () => {
   const joinRules = modelRules.map((r) =>
-    r.id === 'delivery_to_advertiser_shortcut' ? { ...r, enabled: false } : r,
+    r.id === 'event_to_sponsor_shortcut' ? { ...r, enabled: false } : r,
   )
-  const result = findRoute({ joinRules, from: 'ad_delivery_fact', to: 'advertiser_dim' })
+  const result = findRoute({ joinRules, from: 'ad_event_fact', to: 'sponsor_dim' })
   assert.deepEqual(ruleIds(result), [
-    'delivery_to_line_item',
-    'line_item_to_campaign',
-    'campaign_to_advertiser',
+    'event_to_placement',
+    'placement_to_promotion',
+    'promotion_to_sponsor',
   ])
 })
 
-test('model: creative to line item prefers two cheap joins over the many-to-many rule', () => {
-  const result = findRoute({ joinRules: modelRules, from: 'creative_dim', to: 'line_item_dim' })
-  assert.deepEqual(ruleIds(result), ['delivery_to_creative', 'delivery_to_line_item'])
+test('model: banner to placement prefers two cheap joins over the many-to-many rule', () => {
+  const result = findRoute({ joinRules: modelRules, from: 'banner_dim', to: 'placement_dim' })
+  assert.deepEqual(ruleIds(result), ['event_to_banner', 'event_to_placement'])
 })
 
-test('model: billing and buying agency are separate roles of one table', () => {
-  const result = findRoute({ joinRules: modelRules, from: 'advertiser_dim', to: 'agency_dim' })
+test('model: billing and buying partner are separate roles of one table', () => {
+  const result = findRoute({ joinRules: modelRules, from: 'sponsor_dim', to: 'partner_dim' })
   assert.equal(result.hopCount, 1)
-  assert.ok(['buying_agency', 'billing_agency'].includes(result.route[0].role))
+  assert.ok(['buying_partner', 'billing_partner'].includes(result.route[0].role))
 })

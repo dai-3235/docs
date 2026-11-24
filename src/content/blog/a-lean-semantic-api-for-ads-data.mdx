@@ -9,7 +9,7 @@ draft: false
 
 import JoinPathDemo from '../../components/joindemo/JoinPathDemo';
 
-The datasets already exist. Delivery logs, clicks, conversions, spend and billing all land in a warehouse. The problem is not storage. It is that every dashboard, export, notebook and service writes its own SQL against them, so the same number, say impressions last week, comes out three different ways.
+The datasets already exist. Event logs, clicks, conversions, spend and billing all land in a warehouse. The problem is not storage. It is that every dashboard, export, notebook and service writes its own SQL against them, so the same number, say impressions last week, comes out three different ways.
 
 The fix is small to state: **one central service that owns the definition of every metric and dimension, and exposes a dynamic API that consumers query by business name.** This post is the whole design, kept as lean as I can keep it, with the scale decisions left until they are earned.
 
@@ -43,7 +43,7 @@ Each tier adds machinery only when the one below cannot answer. Most traffic sta
 
 Consumers should never see column names. They see two registries, written as data and editable without a deploy.
 
-- A **logical metric** is a business name with a meaning: `impressions`, `spend`, `ctr`. A **logical dimension** is a business name for a way to slice: `campaign`, `device`, `day`.
+- A **logical metric** is a business name with a meaning: `impressions`, `spend`, `ctr`. A **logical dimension** is a business name for a way to slice: `promotion`, `device`, `day`.
 - A **physical metric** binds a logical metric to a column of one table, with an aggregation and a priority. A **physical dimension** binds a logical dimension to a column of a table.
 
 ```ts
@@ -57,7 +57,7 @@ interface PhysicalMetric {
 
 const impressionsOnDaily: PhysicalMetric = {
   logicalMetric: 'impressions',
-  table: 'ad_delivery_daily',
+  table: 'ad_event_daily',
   column: 'impressions',
   aggregation: 'sum',
   priority: 10,
@@ -66,7 +66,7 @@ const impressionsOnDaily: PhysicalMetric = {
 
 Two ideas do most of the work.
 
-**Grain.** Tables and dimensions sit on an ordered scale from fine to coarse: delivery, line item, campaign, advertiser. A table can be broken down only by dimensions at its own grain or coarser. A daily campaign table cannot give you a per-creative breakdown, and the gateway says so instead of guessing.
+**Grain.** Tables and dimensions sit on an ordered scale from fine to coarse: event, placement, promotion, sponsor. A table can be broken down only by dimensions at its own grain or coarser. A daily promotion table cannot give you a per-banner breakdown, and the gateway says so instead of guessing.
 
 **Priority.** One logical metric can have several physical homes, for example an hourly table and a daily rollup. The gateway picks the cheapest table that can answer the whole request, and refuses with a typed reason when two tables tie. A refusal such as `ambiguous_metric` or `no_join_route` is far easier to live with than a silently wrong number.
 
@@ -99,7 +99,7 @@ Each part earns its place:
 - **`cardinality`** is stated from `from` to `to`. It is the only thing that tells the search whether a join multiplies rows. It is declared by the person who knows the data, because it cannot be inferred from column names.
 - **`cost`** is the owner's judgment of how much to trust the join. It is not a measurement. A convention that works: `1` for a key lookup into a dimension (`many-to-one`), higher for a shortcut that skips a level, and highest for a bridge table that fans out. A shortcut must cost more than the chain it replaces, otherwise it silently wins.
 - **`enabled`** turns a rule off without deleting it. A suspect join can be switched off while the data is checked, and routes re-form around it.
-- **`fromRole` and `toRole`** name the capacity in which a table takes part, so the same table can be joined twice. An advertiser table that links to an agency table twice, once as buyer and once as biller, is two rules with two roles.
+- **`fromRole` and `toRole`** name the capacity in which a table takes part, so the same table can be joined twice. A sponsor table that links to a partner table twice, once as buyer and once as biller, is two rules with two roles.
 
 Rules are validated when they are registered, not when they are used: both tables exist, the id is unique, the cost is positive, the cardinality is one of the four values. A cost of zero or less is rejected, and the next section shows why that matters.
 
@@ -107,7 +107,7 @@ Rules are validated when they are registered, not when they are used: both table
 
 The first idea is breadth-first search from the metric table. It finds the route with the fewest joins and stops. Fewest joins is not safest.
 
-Suppose a delivery table reaches an advertiser dimension two ways: a direct shortcut, and a chain of two clean `many-to-one` lookups. Breadth-first search takes the shortcut. If the shortcut goes through a `many-to-many` bridge, each delivery row now appears once per matching bridge row, and spend is counted several times. The result looks plausible, and nothing fails.
+Suppose an event table reaches a sponsor dimension two ways: a direct shortcut, and a chain of two clean `many-to-one` lookups. Breadth-first search takes the shortcut. If the shortcut goes through a `many-to-many` bridge, each event row now appears once per matching bridge row, and spend is counted several times. The result looks plausible, and nothing fails.
 
 What the search needs to minimize is not the number of joins but the **risk** of the route. That is what the cost and the cardinality are for.
 
@@ -141,7 +141,7 @@ Every route is bounded by a hop limit, so a missing rule cannot turn into a walk
 
 So a state is `(table, role)`, and the search keeps a table's label only when it reaches the table in **fewer hops than any label already settled there**. Labels pop in order of cost, so every earlier label is at least as cheap and at least as clean. A later one earns its place only by having more hops left. This is the standard label-setting treatment of a resource-constrained shortest path, and since each table can hold at most one label per hop count, the work stays bounded by the hop limit.
 
-Roles belong to the state for the same reason: `agency` as buyer and `agency` as biller are different nodes, so reaching the table a second time under another role is not a cycle.
+Roles belong to the state for the same reason: `partner` as buyer and `partner` as biller are different nodes, so reaching the table a second time under another role is not a cycle.
 
 ### The code
 
@@ -233,7 +233,7 @@ The cost-ordered search is not the only way. Here is how the others compare for 
 | **Cost-ordered search (this post)** | Dijkstra over declared cost, then fan-out, then joins | safe by default, fast, deterministic, explains itself | costs are human judgment and need review |
 | A* | Dijkstra plus a distance estimate toward the target | big road-map graphs | no useful estimate exists between tables, and the graph is small enough not to need one |
 | Explicit join paths | the author writes the route, as Cube does in its views | fully predictable, no search | authoring cost per path, stale when tables change |
-| Spanning tree or star schema | design the graph so only one path exists | no ambiguity by construction | forbids models with two natural routes, such as two agency roles |
+| Spanning tree or star schema | design the graph so only one path exists | no ambiguity by construction | forbids models with two natural routes, such as two partner roles |
 | Precomputed all-pairs routes | run the search for every pair at load time | lookup at request time | the roles and hop limit multiply the table, and caching on demand gets the same result |
 | Costs learned from query history | tune weights from reviewed queries | adapts without hand-tuning | needs a trusted history, and can lock in old mistakes |
 
@@ -252,7 +252,7 @@ A ratio is not a metric you can sum. Click-through rate computed per day and the
 ```ts
 const derivedMetrics = {
   ctr: { formula: 'clicks / impressions' },
-  ecpm: { formula: 'spend / impressions * 1000' },
+  cpm: { formula: 'spend / impressions * 1000' },
 }
 ```
 
@@ -260,30 +260,30 @@ The gateway aggregates `clicks`, `impressions` and `spend` at the requested brea
 
 ## The escape hatch: CTE and template queries
 
-Some questions do not fit metrics and breakdowns: a top-N grid with business rules, a unique-reach count over a window, a report that needs a threshold applied at one grain and shown at another. Forcing these into the metric model makes the model worse. The escape hatch is a **named, parameterized SQL template** kept in the repository.
+Some questions do not fit metrics and breakdowns: a ranked leaderboard with business rules, a unique-reach count over a window, a report that must drop low-volume rows before ranking. Forcing these into the metric model makes the model worse. The escape hatch is a **named, parameterized SQL template** kept in the repository.
 
-A template engine such as Velocity renders it. The shape is one file per query, with shared rules in an included file, and the consumer sends a name and parameters, never SQL.
+A template engine (Jinja and Mustache are examples) renders it. The shape is one file per query, with shared rules in an included file, and the consumer sends a name and parameters, never SQL.
 
 ```sql
-#parse("top_content/rules.vm")
-with delivery as (
-  select content_title, line_item_id,
+{% include "leaderboard/rules.sql" %}
+with events as (
+  select item_name, placement_id,
          sum(impressions) as impressions,
-         sum(completions) as completions
-  from ad_delivery_daily
+         sum(conversions) as conversions
+  from ad_event_daily
   where day between :start_day and :end_day
-  group by content_title, line_item_id
+  group by item_name, placement_id
 ),
 eligible as (
-  select * from delivery
-  where $minimum_impressions_rule
+  select * from events
+  where {{ minimum_volume_rule }}
 )
-select content_title,
+select item_name,
        sum(impressions) as impressions,
-       sum(completions) as completions
+       sum(conversions) as conversions
 from eligible
-group by content_title
-order by completions desc
+group by item_name
+order by conversions desc
 limit :row_limit
 ```
 
@@ -294,7 +294,7 @@ The template decides the structure, so the structure is reviewed. The parameters
 3. **The engine is sandboxed.** Restrict what a template can reach (no reflection, no file or network classes), so a template can only produce text.
 4. **Each template has a test with expected SQL.** Render it with fixed parameters and compare to a checked-in file. A change to a template shows up as a diff in review.
 
-One trap to avoid: shared rule files grow lists of business constants (long lists of channels, names, thresholds). Those drift. Move them into metadata as data, and let the template read them as parameters.
+One trap to avoid: shared rule files grow lists of business constants (long lists of names and thresholds). Those drift. Move them into metadata as data, and let the template read them as parameters.
 
 A template is also how you serve an old report unchanged while its pieces are moved into metrics. Migrate one CTE at a time into tier 2 and delete the template when nothing is left in it.
 
@@ -315,14 +315,14 @@ Stage 6 is where the design pays off. Because consumers ask by name, adding a fa
 
 ## Long term: reporting, serving and the feedback loop
 
-Ads is a loop. Campaigns are configured, ads are served, delivery is measured, and the measurement changes the next decision. If reporting and serving read different definitions of the same metric, the loop is built on two truths.
+Ads is a loop. Promotions are configured, ads are served, results are measured, and the measurement changes the next decision. If reporting and serving read different definitions of the same metric, the loop is built on two truths.
 
-The gateway can be the single source of truth for the **control plane** of that loop, the decisions that run on seconds-to-minutes timescales: budget pacing, frequency capping, bid adjustments, alerts when delivery falls behind goal. It should not sit in the **data plane**: the auction decision at request time has a latency budget a SQL gateway cannot meet. That path reads precomputed values from a low-latency store, and those values are produced from the same logical definitions.
+The gateway can be the single source of truth for the **control plane** of that loop, the decisions that run on seconds-to-minutes timescales: spend throttling, frequency capping, bid adjustments, alerts when spend falls behind plan. It should not sit in the **data plane**: the auction decision at request time has a latency budget a SQL gateway cannot meet. That path reads precomputed values from a low-latency store, and those values are produced from the same logical definitions.
 
 Minimal-effort feedback looks like this:
 
 - The same logical metric binds to a fresh physical table (minutes old, narrow) and a complete one (hours old, wide). Priority and a freshness requirement on the request choose between them.
-- A pacing job is just another consumer. It queries delivered impressions against goal by line item through the same API, computes the adjustment, and writes it to the system that serves ads.
+- A throttling job is just another consumer. It queries served impressions against goal by placement through the same API, computes the adjustment, and writes it to the system that serves ads.
 - Because the job asks by name, a table move or a new engine behind the metric never touches it.
 
 What the gateway does not do is write back or decide. It stays a read layer with one set of definitions, and the feedback loop is built from consumers of that layer.
