@@ -1,5 +1,5 @@
 ---
-title: "Running slack-relay on a Mac mini"
+title: "Running slack-relay on a Mac"
 description: "Install the plugin, configure Slack, and keep it running for 24 hours."
 sidebar:
   label: Setup
@@ -40,8 +40,8 @@ Create `~/.config/slack-relay/config.json` and `chmod 600` it:
   "user_ids": ["U0123ABCD"],
   "channel_ids": [],
   "workspaces": {
-    "hub": "/Users/fredbot/agent-work/docs",
-    "docs": "/Users/fredbot/work/docs"
+    "hub": "/path/to/hub-repo",
+    "docs": "/path/to/docs-repo"
   }
 }
 ```
@@ -87,7 +87,7 @@ Also set the Mac to start itself and stay logged in: auto-login for the user, an
 
 ## 6. Permissions for unattended runs
 
-A permission prompt in the terminal stalls the session while you are away. Before relying on it, allow only the commands tasks need, for example in the project's `.claude/settings.json`:
+A permission prompt in the terminal stalls the session while you are away. Before relying on it, allow only the commands tasks need, in the project's `.claude/settings.json` or in your user settings at `~/.claude/settings.json`, which apply to every project:
 
 - `Bash(python3 -I <plugin dir>/scripts/slack.py:*)`
 - read, edit and test commands for the workspaces.

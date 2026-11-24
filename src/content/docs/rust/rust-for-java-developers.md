@@ -47,7 +47,7 @@ fn main() {
     println!("{moved} {length}");
 }
 
-fn borrow_length(text: &String) -> usize {
+fn borrow_length(text: &str) -> usize {
     text.len()
 }
 ```
