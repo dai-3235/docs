@@ -11,10 +11,34 @@ const posts = all.slice(0, 5);
 const tags = tagCounts(all).slice(0, 8);
 
 const ladder = [
-  { when: 'Day one', what: 'One service, one store' },
-  { when: 'Reads dominate', what: 'Add a cache' },
-  { when: 'Writes spike', what: 'Add a queue' },
-  { when: 'One node is full', what: 'Split by key' },
+  {
+    when: 'Day one',
+    what: 'One service, one store',
+    trigger: 'A real requirement and a first user.',
+    add: 'A single service that owns its data in one store.',
+    cost: 'One place to deploy, debug and back up. Everything shares one failure domain.',
+  },
+  {
+    when: 'Reads dominate',
+    what: 'Add a cache',
+    trigger: 'The same reads repeat and the store spends its time answering them.',
+    add: 'A cache in front of the hot reads, with a clear rule for when entries expire.',
+    cost: 'Answers can be briefly stale, and there is one more thing to invalidate.',
+  },
+  {
+    when: 'Writes spike',
+    what: 'Add a queue',
+    trigger: 'Bursts of writes slow the request path or overload the store.',
+    add: 'A queue that absorbs bursts and lets a worker drain them at a steady pace.',
+    cost: 'Work finishes after the request does, so retries and duplicates must be safe.',
+  },
+  {
+    when: 'One node is full',
+    what: 'Split by key',
+    trigger: 'A single store can no longer hold the data or the load, even after the earlier steps.',
+    add: 'Partition data by a key so each node owns a slice.',
+    cost: 'Cross-slice queries get harder, and moving a slice becomes an operation.',
+  },
 ];
 
 const gives = [
@@ -62,14 +86,32 @@ const cards = [
       <button type="button" class="btn" data-search-open>Search <kbd>⌘K</kbd></button>
     </div>
 
-    <ol class="ladder" data-reveal aria-label="How a design grows on demand">
-      {ladder.map((step, i) => (
-        <li style={`--h:${28 + i * 24}%`}>
-          <span class="when">{step.when}</span>
-          <strong>{step.what}</strong>
-        </li>
-      ))}
-    </ol>
+    <div class="grow" data-reveal data-grow>
+      <div class="ladder" role="tablist" aria-label="How a design grows on demand">
+        {ladder.map((step, i) => (
+          <button
+            type="button"
+            role="tab"
+            id={`grow-tab-${i}`}
+            aria-controls="grow-panel"
+            aria-selected={i === 0 ? 'true' : 'false'}
+            tabindex={i === 0 ? 0 : -1}
+            style={`--h:${28 + i * 24}%`}
+            data-trigger={step.trigger}
+            data-add={step.add}
+            data-cost={step.cost}
+          >
+            <span class="when">{step.when}</span>
+            <strong>{step.what}</strong>
+          </button>
+        ))}
+      </div>
+      <dl class="grow-panel" id="grow-panel" role="tabpanel" aria-live="polite">
+        <div><dt>Trigger</dt><dd data-slot="trigger">{ladder[0].trigger}</dd></div>
+        <div><dt>Add</dt><dd data-slot="add">{ladder[0].add}</dd></div>
+        <div><dt>Cost</dt><dd data-slot="cost">{ladder[0].cost}</dd></div>
+      </dl>
+    </div>
 
     <div class="principles">
       <div><span class="num">01</span><strong>Simple</strong><span>The <mark>smallest design</mark> that meets today's requirement.</span></div>
@@ -145,3 +187,42 @@ const cards = [
     )}
   </section>
 </Base>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-grow]').forEach((root) => {
+    const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const slots = {
+      trigger: root.querySelector<HTMLElement>('[data-slot="trigger"]')!,
+      add: root.querySelector<HTMLElement>('[data-slot="add"]')!,
+      cost: root.querySelector<HTMLElement>('[data-slot="cost"]')!,
+    };
+
+    const select = (index: number, focus = false) => {
+      tabs.forEach((tab, i) => {
+        tab.setAttribute('aria-selected', String(i === index));
+        tab.tabIndex = i === index ? 0 : -1;
+        tab.classList.toggle('on', i <= index);
+      });
+      const tab = tabs[index];
+      slots.trigger.textContent = tab.dataset.trigger ?? '';
+      slots.add.textContent = tab.dataset.add ?? '';
+      slots.cost.textContent = tab.dataset.cost ?? '';
+      if (focus) tab.focus();
+    };
+
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => select(i));
+      tab.addEventListener('keydown', (event) => {
+        const last = tabs.length - 1;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') select(Math.min(i + 1, last), true);
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') select(Math.max(i - 1, 0), true);
+        else if (event.key === 'Home') select(0, true);
+        else if (event.key === 'End') select(last, true);
+        else return;
+        event.preventDefault();
+      });
+    });
+
+    select(0);
+  });
+</script>
