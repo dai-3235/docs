@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-Operating guide for the slack-relay instance on the Mac mini. Written for the owner. For what it is and why, see [overview](../overview/). For first-time setup, see [setup guide](../setup/).
+Operating guide for the slack-relay instance on the host Mac. Written for the owner. For what it is and why, see [overview](../overview/). For first-time setup, see [setup guide](../setup/).
 
 Items marked **unverified** were reasoned from the code or from how the tools normally behave and have not been exercised on this machine. Replace the marker once you have seen it work.
 
@@ -20,7 +20,7 @@ Items marked **unverified** were reasoned from the code or from how the tools no
 | launchd job | `~/Library/LaunchAgents/ai.slack-relay.plist`, label `ai.slack-relay` |
 | Log | `~/.config/slack-relay/relay.log` (launchd stdout and stderr only; the Claude session itself logs nothing here) |
 | Terminal session | `screen` session named `slack-relay` |
-| Slack app | api.slack.com/apps, app "Claude Relay", bot `slackrelay`, workspace `3235` |
+| Slack app | api.slack.com/apps, your relay app, its bot user and your workspace |
 
 ## How the pieces start
 
@@ -121,6 +121,6 @@ Never run `screen -r` and type into the session while a task is running unless y
 
 ## Known gaps
 
-- No permission rules are pre-approved, so any task that needs a new command will stall until you attach.
+- Only the permission rules you add are pre-approved, in project or user settings. A task that needs any other command stalls until you attach. Never pre-allow `git push` or deletes.
 - The log file does not capture the agent's own output, only launchd's. Use `screen -r` to see what the agent did.
 - Running `claude` inside `screen` under launchd is working as of 2026-11-22, but not proven across a reboot or a 24 hour window.
