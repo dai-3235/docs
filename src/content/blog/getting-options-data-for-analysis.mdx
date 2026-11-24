@@ -1,0 +1,110 @@
+---
+title: "Options data for analysis: where to get it, what it costs, and where it stops"
+description: "A practical map of US stock-options data: why it is hard, what retail platforms and APIs allow, free sources, paid feeds, and AI tools that can sit on top."
+pubDate: 2026-11-24
+kind: technical
+tags: [options, trading, data, ai-tools]
+draft: false
+---
+
+This is a data-engineering view of stock options, not trading advice. The question: if you want to analyze US options, where does the data come from, what stops you, and what can an AI agent do on top of it?
+
+Prices and plans below come from vendor pages read on 2026-11-24. They change often, so treat every number as a snapshot and check the source before you buy.
+
+## Why options data is hard
+
+Stock data is one symbol with one price. Options data is a chain: for each underlying there are many expirations, many strikes, calls and puts, and each contract has its own quote, volume, open interest and implied volatility. One popular underlying can carry thousands of live contracts.
+
+Three things follow.
+
+- **Volume.** Every contract quotes and trades on its own, across many exchanges. The consolidated feed is OPRA, the US options price reporting authority. Databento describes its OPRA dataset as consolidated data from roughly twenty venues, and counts differ by page.
+- **Licensing.** Real-time OPRA data carries exchange fees. They depend on who you are and what you do with the data, so the price is not only the vendor's price.
+- **Derived fields.** Implied volatility and Greeks are not raw market data. Some vendors compute them for you, and some give you the raw chain and leave you to compute them.
+
+## What you can get for free
+
+| Source | What it gives | Limit |
+|---|---|---|
+| [OCC](https://www.theocc.com/) | Volume, open interest and series data, with batch processing for scripted downloads | Reports are per day. I could not confirm how far back free daily open interest goes |
+| [Cboe](https://cboe.com/us/options/market_statistics/historical_data/) | Free historical options volume downloads by symbol, product type or all symbols for a month or year | Volume only. Open interest and quotes sit in the paid DataShop |
+| Broker sandboxes | A free sandbox with delayed data, for example Tradier | Delayed, and for testing the API |
+| Alpaca "indicative" feed | A free derivative of OPRA | Quotes are not actual OPRA quotes and trades are delayed 15 minutes. History starts February 2024 |
+
+Free data is good for exploring and for market-wide statistics such as volume and put-call ratios. It is weak for anything that needs real quotes, intraday history or long backtests.
+
+## What retail platforms allow
+
+Brokers expose options through their own APIs, and they are built for trading, not for research.
+
+- **Alpaca** offers historical option data from February 2024, with an indicative free source and a consolidated OPRA feed for subscribed users.
+- **Schwab Trader API** exposes an options chain endpoint grouped by expiration and strike, and streaming level-one options data. The details I found came largely from community libraries, so confirm against Schwab's developer portal.
+- **Tradier** serves chains, expirations and strikes, with basic Greeks in the chain response. A delayed sandbox is free.
+- **Interactive Brokers** has market data limits and pacing rules in its API docs. The page returned a 403 to my fetch, so I do not quote any limit here.
+
+The common limits are the same across brokers. History is short or absent, rate limits and pacing rules apply, real-time options data needs a market data subscription, and the data license usually forbids redistribution. A broker API is a good way to trade and to read your own positions. It is a poor base for a research dataset.
+
+## Paid data feeds
+
+| Provider | Offer | Price signal |
+|---|---|---|
+| [Databento](https://databento.com/blog/introducing-new-opra-pricing-plans) | OPRA historical and live. Historical stays pay-as-you-go. Usage-based live pricing ended on 2025-06-03 | A Standard plan at $199 a month. Live access needs an exchange license |
+| [Theta Data](https://thetadata.net/articles/2026-05-29-opra-fee-guide-for-options-market-data) | Historical and live options data with an API | A third-party comparison lists about $80 a month, unverified. Its fee guide shows OPRA fees below |
+| [Cboe DataShop](https://datashop.cboe.com/) | Deep history: end-of-day quotes from January 2012, summaries, trades, intervals | Paid per dataset. Academic buyers get a 50% discount, with a $500 minimum |
+| [ORATS](https://orats.com/data-api) | Vendor-computed volatility and Greeks, a live intraday API, one-minute history back to August 2020 | A live intraday API is listed at $599 a month |
+| Polygon (also branded Massive) | Options snapshots and chains | A third-party review lists $79 a month for options, unverified |
+
+The exchange fees are separate from the vendor price. Theta's guide lists these OPRA fees for internal use: professional $31.50 per user a month, non-professional $1.25 per user a month (Theta pays it on the user's behalf), and a non-display system fee of $2,000 a month per category. Redistribution needs its own license, listed at $1,500 a month, or $650 for a query-only service. Delayed data older than 15 minutes carries no OPRA fee, though redistribution may still need vendor registration. That page is a vendor's summary, not legal advice.
+
+So the first decision is not which API. It is whether your use is personal, professional, or a product others will see.
+
+## What is possible, and what is the gap
+
+**Opportunities.**
+
+- **End-of-day chain snapshots are cheap and enough for much research.** Term structure, skew, open-interest changes and implied-volatility rank do not need ticks.
+- **A pre-computed volatility vendor saves the hardest part.** A clean surface and Greeks are real work, so buying them from a vendor like ORATS can beat building your own.
+- **Your own history is an asset.** Free or delayed snapshots, saved daily since today, give you a dataset that the free sources do not.
+
+**Gaps.**
+
+- Free real-time and deep history do not exist. The cost is mostly exchange licensing, not engineering.
+- Retail platforms rate-limit, cap history and ban redistribution, so a shared dashboard needs a commercial license.
+- Vendors disagree on venue counts, history start dates and computed fields. Pick one source of truth per field and record where each value came from.
+
+## A lean data design
+
+A small design handles most research questions without big spend.
+
+1. **Daily snapshot job.** Pull the full chain for a watch list after the close and store it as columnar files partitioned by date and underlying.
+2. **One contract table.** Keep underlying, expiration, strike, type, bid, ask, volume, open interest and implied volatility, plus a source and capture-time column.
+3. **A derived layer.** Compute surface, skew and term-structure features from the snapshots, not by re-querying the vendor.
+4. **Buy history only where it pays.** Pay for tick data for the few underlyings and windows where a question needs it.
+
+This follows the same rule as the rest of this blog: keep it simple, and scale only when a question needs it.
+
+## AI tools people use on top
+
+There are two layers: tools that fetch data, and tools that reason over it.
+
+- **MCP servers.** Alpaca ships an official [MCP server](https://github.com/alpacahq/alpaca-mcp-server) that lets an agent search option contracts by expiration, strike and type, read quotes, Greeks and implied volatility, and place single-leg and multi-leg orders. It runs locally with your keys, defaults to paper trading, and has no built-in remote authentication, so do not expose it to the internet. Its docs warn that orders from the MCP server execute directly, so review any AI-generated order before confirming it. Tool counts differ between its own pages.
+- **Plain code agents.** A coding agent that writes the snapshot job, the loaders and the analysis notebooks is the safest and most common use. It reads data. It does not trade.
+- **Natural-language analysis.** An agent can answer "which names have an unusual jump in front-month implied volatility" against your contract table, if the table exists and has clear names.
+
+I did not find, and do not claim, a single dominant AI skill used by many experts. Use the official vendor integrations and run them against paper accounts first.
+
+## What I would do
+
+1. Decide the use: personal research, professional work, or a product. That sets the license cost.
+2. Start free: save daily chain snapshots from a broker sandbox or the delayed feed, and use OCC and Cboe for volume and open interest context.
+3. Buy one feed for one gap: a vendor with computed volatility if you need surfaces, or pay-as-you-go OPRA history if you need ticks.
+4. Add an agent for building and querying the dataset first. Give it trading rights only on a paper account, and only after that.
+
+## Sources
+
+- [Databento: new OPRA pricing plans](https://databento.com/blog/introducing-new-opra-pricing-plans), 2025-06-03
+- [Theta Data: OPRA fee guide](https://thetadata.net/articles/2026-05-29-opra-fee-guide-for-options-market-data), 2026-05-29
+- [Alpaca: historical option data](https://docs.alpaca.markets/us/docs/historical-option-data)
+- [Alpaca MCP server](https://github.com/alpacahq/alpaca-mcp-server)
+- [Cboe historical data](https://cboe.com/us/options/market_statistics/historical_data/) and [Cboe DataShop](https://datashop.cboe.com/)
+- [OCC market data](https://www.theocc.com/market-data/market-data-reports/other-market-data-info/batch-processing)
+- [ORATS data API](https://orats.com/data-api)
