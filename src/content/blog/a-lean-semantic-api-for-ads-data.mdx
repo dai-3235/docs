@@ -97,7 +97,7 @@ Each part earns its place:
 
 - **`from`, `to`, and the join columns.** A rule is stored once. The search can walk it in either direction, so there is no need to declare a reverse rule.
 - **`cardinality`** is stated from `from` to `to`. It is the only thing that tells the search whether a join multiplies rows. It is declared by the person who knows the data, because it cannot be inferred from column names.
-- **`cost`** is the owner's judgment of how much to trust the join. It is not a measurement. A convention that works: `1` for a key lookup into a dimension (`many-to-one`), higher for a shortcut that skips a level, and highest for a bridge table that fans out. A shortcut must cost more than the chain it replaces, otherwise it silently wins.
+- **`cost`** is the owner's judgment of how much to trust the join. It is not a measurement. A convention that works: `1` for a key lookup into a dimension (`many-to-one`), higher for a shortcut that skips a level, and highest for a bridge table that fans out. Price a shortcut on purpose: below the chain it skips if you trust its join columns, above it if you do not. The search follows the price without exception.
 - **`enabled`** turns a rule off without deleting it. A suspect join can be switched off while the data is checked, and routes re-form around it.
 - **`fromRole` and `toRole`** name the capacity in which a table takes part, so the same table can be joined twice. A sponsor table that links to a partner table twice, once as buyer and once as biller, is two rules with two roles.
 
@@ -110,6 +110,70 @@ The first idea is breadth-first search from the metric table. It finds the route
 Suppose an event table reaches a sponsor dimension two ways: a direct shortcut, and a chain of two clean `many-to-one` lookups. Breadth-first search takes the shortcut. If the shortcut goes through a `many-to-many` bridge, each event row now appears once per matching bridge row, and spend is counted several times. The result looks plausible, and nothing fails.
 
 What the search needs to minimize is not the number of joins but the **risk** of the route. That is what the cost and the cardinality are for.
+
+### Several ways to join, one chosen
+
+Take a concrete request: total `spend` by `sponsor`. The metric lives on `ad_event_fact`, the dimension on `sponsor_dim`. The model has three ways to get there.
+
+```text
+ad_event_fact ──event_to_sponsor_shortcut──────────────────────────► sponsor_dim
+ad_event_fact ─► placement_dim ─► promotion_dim ───────────────────► sponsor_dim
+ad_event_fact ─► banner_dim ═(banner rotation, many-to-many)═► placement_dim ─► promotion_dim ─► sponsor_dim
+```
+
+Each route is scored by adding up its joins. A join contributes its declared cost, one fan-out if it multiplies rows in the direction walked, and one join.
+
+| Route | Joins | Sum of costs | Fan-outs |
+|---|---|---|---|
+| A. shortcut | 1 | 2.5 | 0 |
+| B. event, placement, promotion, sponsor | 3 | 1 + 1 + 1 = 3 | 0 |
+| C. through the banner rotation | 4 | 1 + 3 + 1 + 1 = 6 | 1 |
+
+The gateway picks the route with the lowest tuple of (cost, fan-outs, joins). Here that is A, at cost 2.5. Fewest joins also picks A, so far they agree.
+
+Now the owner learns the shortcut's join columns are only approximately right, and raises its cost from 2.5 to 4. Nothing else changes.
+
+| Route | Joins | Sum of costs | Fan-outs | Picked by fewest joins | Picked by lowest cost |
+|---|---|---|---|---|---|
+| A. shortcut | 1 | 4 | 0 | yes | no |
+| B. chain | 3 | 3 | 0 | no | **yes** |
+| C. banner rotation | 4 | 6 | 1 | no | no |
+
+Fewest joins still takes A, because it only counts joins. Lowest cost takes B, because the owner said A is worth more than B, and the search believes the owner. C loses in both cases: it costs the most and fans out, and the spend would be counted once per matching banner.
+
+One more case, from the demo below. Two routes cost the same, 2 each. One goes through the event table and fans out on the way, the other uses a direct rule that does not. Cost ties, so fan-outs decide, and the direct rule wins. Joins only decide when cost and fan-outs both tie.
+
+That is the whole selection rule, and it is small enough to show completely.
+
+```ts
+interface Score {
+  cost: number
+  fanOuts: number
+  joins: number
+}
+
+function stepScore(rule: JoinRule, direction: 'forward' | 'backward'): Score {
+  return {
+    cost: rule.cost,
+    fanOuts: causesFanOut(rule, direction) ? 1 : 0,
+    joins: 1,
+  }
+}
+
+function addScores(a: Score, b: Score): Score {
+  return { cost: a.cost + b.cost, fanOuts: a.fanOuts + b.fanOuts, joins: a.joins + b.joins }
+}
+
+function compareScores(a: Score, b: Score): number {
+  return a.cost - b.cost || a.fanOuts - b.fanOuts || a.joins - b.joins
+}
+```
+
+A negative result means `a` is the better route. Everything else in the search is about finding the lowest score without listing every route.
+
+### Why not list every route and sort
+
+Listing all routes works on a graph this size and fails on a real one. The number of simple routes between two tables grows exponentially with the number of rules, and the hop limit only caps their length. The search avoids the listing by exploring routes in score order, so it stops at the best one.
 
 ### The search is Dijkstra with a three-part cost
 
@@ -125,15 +189,25 @@ A tuple compared lexicographically still works with Dijkstra, as long as each pa
 
 Order matters. Cost first means a cheap fan-out can still beat an expensive clean route, and that is a deliberate choice: costs are the owner's statement about trust, and the fan-out count only breaks ties between routes the owner priced equally. Put fan-out first if you would rather refuse any multiplying join when a clean one exists, and accept that you will pay for it in cost.
 
-A worked trace, with a direct rule `a → c` at cost 5 and a chain `a → b → c` with cost 1 each:
+Here is the real trace for the example above, with the shortcut priced at 4. The frontier is a priority queue of partial routes ordered by score, and each step takes the best one off the front.
 
-| Pop | State | Cost | What happens |
-|---|---|---|---|
-| 1 | `a` | 0 | push `c` via direct (5) and `b` (1) |
-| 2 | `b` | 1 | push `c` via `b` (2) |
-| 3 | `c` via `b` | 2 | target popped, return the chain |
+| Pop | Partial route | Cost | Fan-outs | Joins | What happens |
+|---|---|---|---|---|---|
+| 1 | start at `ad_event_fact` | 0 | 0 | 0 | push each neighbour: placement, surface, banner at 1, sponsor via the shortcut at 4 |
+| 2 | `placement_dim` | 1 | 0 | 1 | push promotion at 2, the way back to the event table at 2, and banner through the rotation at 4 |
+| 3 | `surface_dim` | 1 | 0 | 1 | nothing new, only a way back to the event table |
+| 4 | `banner_dim` | 1 | 0 | 1 | push the way back to the event table at 2 and placement through the rotation at 4 |
+| 5 | `promotion_dim` via placement | 2 | 0 | 2 | push `sponsor_dim` at 3 |
+| 6 to 8 | back to `ad_event_fact` | 2 | 1 | 2 | skipped: the event table is already settled with fewer joins |
+| 9 | `sponsor_dim` via the chain | 3 | 0 | 3 | **target popped, return the chain** |
 
-The direct route at cost 5 is never expanded. The search stops at the cheapest answer and does not look at the rest of the graph.
+Three things to notice.
+
+- **The shortcut is never expanded.** It sits in the frontier at cost 4 when the chain pops at cost 3. Every route still in the frontier costs at least 3, and costs only grow as joins are added, so none can beat the chain. That is the proof, and it is the whole reason the first pop of the target is optimal.
+- **The rotation route is never expanded.** It enters the frontier at cost 4 and the chain finishes at 3 first.
+- **Turning back is skipped, not forbidden.** Pops 6 to 8 are routes that walk back to where they started. They carry a fan-out and the table is already settled, so the search drops them. Without that check every cycle would be walked again until the hop limit.
+
+With the shortcut priced at 2.5 the same search pops the shortcut at step 9 with cost 2.5, before the chain finishes at 3. Same code, same graph, different price, different answer, and no branch in the algorithm that mentions either.
 
 ### The hop limit, and why the state has two parts
 
