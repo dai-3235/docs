@@ -192,3 +192,26 @@ Not asserted anywhere above, pending a primary source.
 - How DataJunction chooses among several candidate paths, and how MetricFlow selects a path when more than one exists. The pages read describe a graph but not the selection rule.
 - Cube's path selection when no view is used.
 - Whether the MetricFlow license is currently Apache 2.0 (the README capture was internally inconsistent).
+
+## Google Ads and Meta insights (added for the single-post rewrite)
+
+Retrieved 2026-11-23 by page fetch with an automated summarizer.
+
+### Google Ads reporting
+
+- Queries use GAQL: the target resource in `FROM`, and "the selected attributes, segments, and metrics in the SELECT clause". Source: <https://developers.google.com/google-ads/api/docs/reporting/overview>.
+- A segment is "a dimension used to group data"; a metric is "a measurement of performance". Source: <https://developers.google.com/google-ads/api/docs/query/overview>.
+- Selecting a column of a related resource joins it implicitly. Source: same page.
+- Which segments can be selected with a resource is given by a `selectable_with` list, and some segments require others (for example `segments.ad_sub_network_type` requires `segments.ad_network_type`). Source: <https://developers.google.com/google-ads/api/docs/reporting/segmentation>.
+- Results come through `SearchStream` or paged `Search`. Source: reporting overview page.
+
+### Meta Marketing API insights
+
+- A request has parameters, requested metrics and breakdowns, at the account, campaign, ad set or ad level. Source: <https://developers.facebook.com/docs/marketing-api/insights>.
+- "Due to storage constraints, only some permutations of breakdowns are available." Source: <https://developers.facebook.com/docs/marketing-api/insights/breakdowns>.
+- Some breakdowns cannot be combined with others and return an error. Source: same page.
+- Asynchronous reports: POST creates a report run, poll its status, then fetch results. Source: <https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights/best-practices>. The async-jobs page named in the Insights page returned 404.
+
+### DataJunction origin
+
+The README (<https://github.com/DataJunction/dj>) and site (<https://datajunction.io/>), retrieved 2026-11-23, do not mention Netflix.

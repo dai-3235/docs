@@ -1,0 +1,210 @@
+---
+title: "A lean semantic API for ads data"
+description: "One central service that turns business-named metric requests into SQL for ads data consumers: join rules, derived metrics, template queries, and how it scales on demand."
+pubDate: 2026-11-23
+kind: technical
+tags: [semantic-layer, ads, architecture]
+draft: false
+---
+
+import JoinPathDemo from '../../components/joindemo/JoinPathDemo';
+
+The datasets already exist. Delivery logs, clicks, conversions, spend and billing all land in a warehouse. The problem is not storage. It is that every dashboard, export, notebook and service writes its own SQL against them, so the same number, say impressions last week, comes out three different ways.
+
+The fix is small to state: **one central service that owns the definition of every metric and dimension, and exposes a dynamic API that consumers query by business name.** This post is the whole design, kept as lean as I can keep it, with the scale decisions left until they are earned.
+
+The examples use an invented ad-reporting domain. Table names are made up, and nothing here describes a particular company's system.
+
+## What problem are we solving
+
+Four things go wrong when each consumer talks to the tables directly.
+
+- **Different answers.** Each team joins and filters in its own way, so the same metric has several values.
+- **Hidden rules.** Which table to use, which join is safe, which rows to exclude: all of it lives in people's heads or in copied queries.
+- **Slow change.** A new breakdown needs a new query for each consumer. A table move breaks all of them.
+- **No guardrails.** Anyone can join a fact table to itself through a many-to-many table and double-count spend.
+
+A central service fixes all four by giving consumers one question to ask: *which metrics, broken down by what, filtered how, over which dates.* The service answers it, and the SQL stays an implementation detail.
+
+## The shape: one gateway, four tiers of query
+
+A request names metrics, breakdowns, a filter and a time range. The gateway turns it into SQL, runs it on a registered datasource, and returns rows. Everything else is a question of how much work that translation does.
+
+| Tier | What the consumer sends | What the gateway does | Needs |
+|---|---|---|---|
+| 1. Simple aggregation | metrics + breakdowns on one table | pick the table, `GROUP BY` | metadata only |
+| 2. Rich join query | metrics + breakdowns that live on different tables | find the join route, join, aggregate | join rules |
+| 3. Derived metrics | ratios and differences of base metrics | compute from base metrics after aggregating | metric formulas |
+| 4. Template query | a named query with parameters | render a reviewed CTE template, run it | a template in the repo |
+
+Each tier adds machinery only when the one below cannot answer. Most traffic stays in tier 1 and 2. That is what keeps the service lean: the complex path exists, but it is not the default path.
+
+## Organize the metrics once
+
+Consumers should never see column names. They see two registries, written as data and editable without a deploy.
+
+- A **logical metric** is a business name with a meaning: `impressions`, `spend`, `ctr`. A **logical dimension** is a business name for a way to slice: `campaign`, `device`, `day`.
+- A **physical metric** binds a logical metric to a column of one table, with an aggregation and a priority. A **physical dimension** binds a logical dimension to a column of a table.
+
+```ts
+interface PhysicalMetric {
+  logicalMetric: string
+  table: string
+  column: string
+  aggregation: 'sum' | 'count_distinct'
+  priority: number
+}
+
+const impressionsOnDaily: PhysicalMetric = {
+  logicalMetric: 'impressions',
+  table: 'ad_delivery_daily',
+  column: 'impressions',
+  aggregation: 'sum',
+  priority: 10,
+}
+```
+
+Two ideas do most of the work.
+
+**Grain.** Tables and dimensions sit on an ordered scale from fine to coarse: delivery, line item, campaign, advertiser. A table can be broken down only by dimensions at its own grain or coarser. A daily campaign table cannot give you a per-creative breakdown, and the gateway says so instead of guessing.
+
+**Priority.** One logical metric can have several physical homes, for example an hourly table and a daily rollup. The gateway picks the cheapest table that can answer the whole request, and refuses with a typed reason when two tables tie. A refusal such as `ambiguous_metric` or `no_join_route` is far easier to live with than a silently wrong number.
+
+Because the datasets are already there, onboarding is registration, not migration: add the table, bind its columns, declare its grain, and it becomes queryable.
+
+## Join rules for the rich query
+
+A **join rule** is a declared connection between two tables with a cost, a cardinality and an on-off switch. Together they form a graph, and the gateway finds the **route**, the chosen sequence of joins, between the metric table and the dimension table.
+
+```ts
+interface JoinRule {
+  id: string
+  from: string
+  to: string
+  cost: number
+  cardinality: 'one-to-one' | 'many-to-one' | 'one-to-many' | 'many-to-many'
+  enabled: boolean
+}
+```
+
+Breadth-first search finds the route with the fewest joins, and that is the wrong goal. The fewest joins can run through a many-to-many table and count a measure twice. So the search is cost-ordered: each rule has a declared cost, the cheapest route wins, and ties go to the route with fewer **fan-outs** (joins where one row can match many), then to fewer joins. A hop limit bounds planning, and a **role** lets one table appear twice, for instance an agency as buyer and as biller.
+
+When no route is safe, the gateway refuses with a reason instead of picking one. The demo below runs the search on the invented ad model. Pick a scenario, then step through it.
+
+<JoinPathDemo client:visible />
+
+Declared rules come first and inference comes last: an explicit rule for the dimension, then a declared multi-hop route, then a rule over several columns, and only then a join inferred from a shared dimension. The more the system guesses, the more it needs to explain.
+
+## Derived metrics
+
+A ratio is not a metric you can sum. Click-through rate computed per day and then averaged is not the click-through rate of the week. So derived metrics are defined over base metrics and computed after aggregation.
+
+```ts
+const derivedMetrics = {
+  ctr: { formula: 'clicks / impressions' },
+  ecpm: { formula: 'spend / impressions * 1000' },
+}
+```
+
+The gateway aggregates `clicks`, `impressions` and `spend` at the requested breakdown, then applies the formula to the aggregated values and guards against a zero denominator. When the base metrics live on different tables, the same rule applies: aggregate each table at the shared breakdown first, then combine. That is a CTE per table and a join on the breakdown keys, which is the standard star-join the gateway generates for tier 2 when a request spans several fact tables.
+
+## The escape hatch: CTE and template queries
+
+Some questions do not fit metrics and breakdowns: a top-N grid with business rules, a unique-reach count over a window, a report that needs a threshold applied at one grain and shown at another. Forcing these into the metric model makes the model worse. The escape hatch is a **named, parameterized SQL template** kept in the repository.
+
+A template engine such as Velocity renders it. The shape is one file per query, with shared rules in an included file, and the consumer sends a name and parameters, never SQL.
+
+```sql
+#parse("top_content/rules.vm")
+with delivery as (
+  select content_title, line_item_id,
+         sum(impressions) as impressions,
+         sum(completions) as completions
+  from ad_delivery_daily
+  where day between :start_day and :end_day
+  group by content_title, line_item_id
+),
+eligible as (
+  select * from delivery
+  where $minimum_impressions_rule
+)
+select content_title,
+       sum(impressions) as impressions,
+       sum(completions) as completions
+from eligible
+group by content_title
+order by completions desc
+limit :row_limit
+```
+
+The template decides the structure, so the structure is reviewed. The parameters decide the values, so they stay bound parameters and never string concatenation. Four rules keep this safe and boring:
+
+1. **Templates are code.** They live in the repo, go through review, and ship with the service. Nobody posts SQL to the API.
+2. **Values are bound, structure is rendered.** Dates, ids and limits are bound parameters. Only fragments that come from the service's own constants, such as a shared rule, are rendered into the text.
+3. **The engine is sandboxed.** Restrict what a template can reach (no reflection, no file or network classes), so a template can only produce text.
+4. **Each template has a test with expected SQL.** Render it with fixed parameters and compare to a checked-in file. A change to a template shows up as a diff in review.
+
+One trap to avoid: shared rule files grow lists of business constants (long lists of channels, names, thresholds). Those drift. Move them into metadata as data, and let the template read them as parameters.
+
+A template is also how you serve an old report unchanged while its pieces are moved into metrics. Migrate one CTE at a time into tier 2 and delete the template when nothing is left in it.
+
+## How big is this, and how big can it get
+
+Lean first, scale on demand. Each step below is added only when a measured limit appears, and none requires redesigning the layer above it.
+
+| Stage | Add | Trigger |
+|---|---|---|
+| 1. Single service | one JVM or Node service, metadata in a small relational store, in-memory metadata cache reloaded on change | first consumers |
+| 2. Cache | result cache keyed by the normalized request, short expiry | repeated dashboard queries |
+| 3. Several engines | a driver per datasource: warehouse for history, a columnar store for fresh data | one engine cannot serve both depth and freshness |
+| 4. Splitting | one request spanning two datasources is split, each part run where it lives, results merged by the shared breakdown | metrics live in different engines |
+| 5. Async and paging | long queries return a job handle, large results stream | exports and wide time ranges |
+| 6. Precompute | materialize the hot rollups and register them as physical metrics with higher priority | a query shape dominates cost |
+
+Stage 6 is where the design pays off. Because consumers ask by name, adding a faster physical table changes nothing for them. The gateway just prefers it.
+
+## Long term: reporting, serving and the feedback loop
+
+Ads is a loop. Campaigns are configured, ads are served, delivery is measured, and the measurement changes the next decision. If reporting and serving read different definitions of the same metric, the loop is built on two truths.
+
+The gateway can be the single source of truth for the **control plane** of that loop, the decisions that run on seconds-to-minutes timescales: budget pacing, frequency capping, bid adjustments, alerts when delivery falls behind goal. It should not sit in the **data plane**: the auction decision at request time has a latency budget a SQL gateway cannot meet. That path reads precomputed values from a low-latency store, and those values are produced from the same logical definitions.
+
+Minimal-effort feedback looks like this:
+
+- The same logical metric binds to a fresh physical table (minutes old, narrow) and a complete one (hours old, wide). Priority and a freshness requirement on the request choose between them.
+- A pacing job is just another consumer. It queries delivered impressions against goal by line item through the same API, computes the adjustment, and writes it to the system that serves ads.
+- Because the job asks by name, a table move or a new engine behind the metric never touches it.
+
+What the gateway does not do is write back or decide. It stays a read layer with one set of definitions, and the feedback loop is built from consumers of that layer.
+
+## How others do it
+
+The reasoning is not new. Each of these systems takes a different position on how much the consumer says and how much the service decides. Every claim below is from the system's own documentation, retrieved 2026-11-22 or 2026-11-23; follow the links.
+
+| System | Consumer asks | The service decides |
+|---|---|---|
+| [Google Ads reporting](https://developers.google.com/google-ads/api/docs/query/overview) | a query in GAQL: `SELECT` metrics and segments `FROM` one resource | which combinations are legal, using a compatibility list per segment; related resources join implicitly when you select from them |
+| [Meta Marketing API insights](https://developers.facebook.com/docs/marketing-api/insights/breakdowns) | requested metrics, breakdowns and a time range at an object level (account, campaign, ad set, ad) | which breakdown permutations exist: "only some permutations of breakdowns are available" |
+| [Uber data abstraction layer](https://www.uber.com/blog/data-abstraction-layer/) | a request against logical tables, first used for advertiser reporting | which physical table answers it, chosen in phases; joins are applied while assembling the result |
+| [DataJunction](https://github.com/DataJunction/dj) | metrics and dimensions defined in SQL on a node graph | join paths inferred from dimension links |
+| [dbt MetricFlow](https://docs.getdbt.com/docs/build/join-logic) | metrics and dimensions | joins by entity type, with fan-out and chasm joins restricted, and at most two hops |
+| [Cube](https://docs.cube.dev/docs/data-modeling/concepts/working-with-joins) | measures and dimensions from a view | joins declared with a relationship; a view fixes the join path to remove ambiguity |
+
+What to take from this:
+
+- **Google Ads and Meta both expose the same idea to ad buyers**: name metrics and breakdowns, and the platform decides what combinations are valid. Google exposes the rules as metadata you can query (`selectable_with`), and Meta states the limit in prose. Both show that a restricted, well-described combination space is a feature, not a gap.
+- **Meta separates the quick and the slow path**: a synchronous request, and an asynchronous report job you poll and then fetch. That is stage 5 above.
+- **Uber's layer is the closest in shape** to the one described here, with logical tables, several physical candidates per metric and staged table selection. The post does not describe declared join costs.
+- **MetricFlow restricts fan-out** by type. This design ranks routes by declared cost and uses fan-out as a tie-break, which allows more routes at the price of more configuration.
+- **Cube fixes the path in the view.** That makes results predictable and takes the search away. It is the right call when the model is small.
+
+DataJunction is often associated with Netflix, but its own README and site do not say so, so I list it by name only. I also did not retrieve Airbnb's Minerva posts, so it is not compared here.
+
+## When not to build this
+
+- **One consumer, one warehouse.** A few well-named curated tables in the warehouse are enough.
+- **A BI tool already holds your definitions** and every consumer is that tool. Use its model.
+- **Definitions change daily and nobody owns them.** A central service freezes the disagreement instead of resolving it. Fix ownership first.
+- **The data is one wide table.** There is no join to find.
+
+Build it when several consumers need the same numbers, the tables are many and the joins are easy to get wrong. Start with tier 1 and 2, add tier 3 when ratios appear, keep tier 4 as the exception, and let scale arrive in the order of the table above.
