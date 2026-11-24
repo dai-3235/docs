@@ -1,0 +1,74 @@
+---
+title: "Reading ai-hedge-fund: how an LLM stock-analysis project is built"
+description: "A tour of the open-source ai-hedge-fund project: investor-persona agents, a rule that the model never touches the trade, risk gates, and paper trading and backtests."
+pubDate: 2026-11-24
+kind: technical
+tags: [trading, agents, architecture, open-source]
+draft: false
+---
+
+import Workflow from '../../components/workflow/Workflow';
+import { hedgeFundFlow } from '../../data/workflows';
+
+[virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) is one of the most-starred open-source projects that applies LLM agents to investing. The GitHub page showed about 64.8k stars when I read it. This post reads its documentation to see how it is put together, and what to borrow if you build something similar for options.
+
+It is a proof of concept for education and research. The project says so itself, and states that the system does not make real trades. Nothing here is investment advice.
+
+I read the root README and the README of the new `hedge_fund` package. I did not read the agent source files, so everything below is what the documentation says, not what I verified in code. The README notes that the new core is work in progress and not yet wired into the older app in `src/` and `app/`.
+
+## The problem it tackles
+
+A single LLM asked "should I buy this stock?" gives an answer that is hard to test, hard to size and hard to audit. The project splits the problem into stages, so each stage can be tested on its own and the model is kept away from the part that moves money.
+
+## The pipeline
+
+<Workflow client:visible flow={hedgeFundFlow} title="Decision pipeline" height={340} />
+
+The documented flow is data, then alpha models, then portfolio, then risk, then execution, then a ledger. A single function advances the fund one session at a time. The same function runs on a schedule for paper trading and in a loop over history for a backtest.
+
+## Views from personas and a quant model
+
+The model layer has two kinds of signal.
+
+- **Investor personas.** Agents modelled on Warren Buffett, Charlie Munger, Benjamin Graham, Peter Lynch and Stanley Druckenmiller each read the data and form a view.
+- **Quant models.** The documented one is post-earnings drift. It has no persona and is plain code.
+
+Each view is a number between -1 and +1. A numeric signal is easy to blend, log and compare, which a paragraph of prose is not.
+
+## The rule: the model never touches the trade
+
+The README states the principle in one line: the LLM never touches the trade. Agents form views. Deterministic code turns views into target weights, which are conviction-weighted and optionally market-neutral. Hard limits then clamp each position and the gross exposure, and a master check runs on the netted book.
+
+This is the idea worth copying. The model is good at reading filings and forming an opinion. It is bad at being a reliable position sizer. Putting a fixed gate between the two means a hallucinated view can be wrong but cannot be large.
+
+## Data you can trust in a backtest
+
+The data is filtered by filing date, so a backtest only sees numbers that were public on the day. This point-in-time rule removes the most common way backtests flatter themselves. Prices, fundamentals and earnings come from the Financial Datasets API. An alternative pay-per-call path is limited to the last 365 days of data and to non-professional use, according to the README.
+
+## Paper trading and backtests
+
+Two modes ship in the interactive app.
+
+- **Paper trading.** A ledger kept on disk, an approval step before trades, and a kill switch.
+- **Backtesting.** A simulated broker that charges half-spread and commission, and fills a decision at the next close. The output is an equity curve against a benchmark and a record per session.
+
+A decision at one close that executes at the next removes lookahead by construction.
+
+## What is not there yet
+
+- The README lists live brokers as planned.
+- Validation methods such as combinatorial purged cross-validation and the probability of backtest overfitting are listed as planned, not built.
+- No result is claimed. An article I read notes that the project has not demonstrated consistent live returns.
+- It supports several LLM providers, Anthropic included, with keys saved locally on first use.
+
+## What to take from it for options
+
+1. **Keep the model out of sizing.** Let an LLM read and score. Let code and hard limits decide size.
+2. **One advance function for live and history.** If paper trading and backtesting share a code path, a backtest means something.
+3. **Point-in-time data first.** Snapshot your options chains daily, as described in the [options data post](/docs/blog/getting-options-data-for-analysis/), so your own history is clean.
+4. **Options need more than this has.** The documented signals are about equities. Options add Greeks, expiry and assignment risk, so the risk stage would need position-level and portfolio-level Greek limits.
+
+## Sources
+
+- [virattt/ai-hedge-fund README](https://github.com/virattt/ai-hedge-fund)
+- The `hedge_fund` package README in the same repository
