@@ -69,7 +69,7 @@ npm run build
 npm run check:overflow
 ```
 
-`check:overflow` serves `dist/`, opens every page in a real Chrome window fixed at 390 and 320 px (no mobile zoom-out emulation, which hides overflow), scrolls the whole page so lazy islands hydrate, and fails when `document.documentElement.scrollWidth` is wider than the window. It needs Chrome; set `CHROME_BIN` if it is not in a standard location.
+`check:overflow` serves `dist/`, opens every page in a real Chrome window fixed at 390 and 320 px (no mobile zoom-out emulation, which hides overflow), scrolls the whole page so lazy islands hydrate, also opens every full-screen diagram overlay on the page, and fails when `document.documentElement.scrollWidth` is wider than the window in any of those states. It needs Chrome; set `CHROME_BIN` if it is not in a standard location.
 
 ## Publish
 
