@@ -10,6 +10,13 @@ const all = await publishedPosts();
 const posts = all.slice(0, 5);
 const tags = tagCounts(all).slice(0, 8);
 
+const ladder = [
+  { when: 'Day one', what: 'One service, one store' },
+  { when: 'Reads dominate', what: 'Add a cache' },
+  { when: 'Writes spike', what: 'Add a queue' },
+  { when: 'One node is full', what: 'Split by key' },
+];
+
 const cards = [
   {
     tag: 'System design',
@@ -37,20 +44,30 @@ const cards = [
 
 <Base title="Engineering Notes">
   <section class="hero">
-    <span class="eyebrow" data-reveal><span class="dot"></span>simple · lean · scale on demand</span>
-    <h1 data-reveal>Efficient, practical <span class="gradient">engineering</span></h1>
-    <p>
-      System designs, runbooks and posts that start with the simplest thing that works, stay small, and
-      grow only when the load asks for it.
+    <span class="eyebrow" data-reveal><span class="dot"></span>engineering notes · designs that earn their place</span>
+    <h1 data-reveal>Build it <mark>simple</mark>.<br />Keep it <mark>lean</mark>.<br /><mark>Scale</mark> when it asks.</h1>
+    <p data-reveal>
+      Every post here shows the <strong>smallest design that works today</strong>, names the
+      <strong>trigger</strong> for the next step, and says what that step <strong>costs</strong>.
     </p>
-    <div class="actions">
-      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Start with slack-relay</a>
+    <div class="actions" data-reveal>
+      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Read a real design <span aria-hidden="true">→</span></a>
       <button type="button" class="btn" data-search-open>Search <kbd>⌘K</kbd></button>
     </div>
+
+    <ol class="ladder" data-reveal aria-label="How a design grows on demand">
+      {ladder.map((step, i) => (
+        <li style={`--h:${28 + i * 24}%`}>
+          <span class="when">{step.when}</span>
+          <strong>{step.what}</strong>
+        </li>
+      ))}
+    </ol>
+
     <div class="principles">
-      <div><strong>Simple</strong><span>The smallest design that meets today's requirement.</span></div>
-      <div><strong>Lean</strong><span>Few moving parts, each one earning its place.</span></div>
-      <div><strong>Scale on demand</strong><span>Say what triggers the next step, then build it only then.</span></div>
+      <div><span class="num">01</span><strong>Simple</strong><span>The <mark>smallest design</mark> that meets today's requirement.</span></div>
+      <div><span class="num">02</span><strong>Lean</strong><span>Few moving parts, each one <mark>earning its place</mark>.</span></div>
+      <div><span class="num">03</span><strong>Scale on demand</strong><span>Name the <mark>trigger</mark>, build the next step only then.</span></div>
     </div>
   </section>
 
