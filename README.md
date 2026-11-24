@@ -71,6 +71,10 @@ npm run check:overflow
 
 `check:overflow` serves `dist/`, opens every page in a real Chrome window fixed at 390 and 320 px (no mobile zoom-out emulation, which hides overflow), scrolls the whole page so lazy islands hydrate, and fails when `document.documentElement.scrollWidth` is wider than the window. It needs Chrome; set `CHROME_BIN` if it is not in a standard location.
 
+## Checks on pull requests
+
+`.github/workflows/checks.yml` runs on every pull request: `npm test`, `npm run build` (which includes the content check and link validation), and `npm run check:overflow` at 390 and 320 px on the runner's own Chrome. A red check blocks the merge. The deploy workflow is separate and runs only on `main`.
+
 ## Publish
 
 Merging to `main` runs `.github/workflows/deploy.yml`, which builds the site and deploys it to GitHub Pages at `https://dai-3235.github.io/docs/`. The repo's Pages source must be set to GitHub Actions.

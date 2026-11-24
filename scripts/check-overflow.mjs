@@ -76,7 +76,7 @@ async function launchChrome(chrome) {
   const profile = mkdtempSync(path.join(tmpdir(), 'overflow-check-'))
   const child = spawn(
     chrome,
-    ['--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'],
+    ['--headless=new', '--disable-gpu', '--no-first-run', ...(process.env.CI ? ['--no-sandbox'] : []), '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'],
     { stdio: 'ignore' },
   )
   const portFile = path.join(profile, 'DevToolsActivePort')
