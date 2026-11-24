@@ -10,63 +10,25 @@ const all = await publishedPosts();
 const posts = all.slice(0, 5);
 const tags = tagCounts(all).slice(0, 8);
 
-const ladder = [
-  {
-    when: 'Day one',
-    what: 'One service, one store',
-    trigger: 'A real requirement and a first user.',
-    add: 'A single service that owns its data in one store.',
-    cost: 'One place to deploy, debug and back up. Everything shares one failure domain.',
-  },
-  {
-    when: 'Reads dominate',
-    what: 'Add a cache',
-    trigger: 'The same reads repeat and the store spends its time answering them.',
-    add: 'A cache in front of the hot reads, with a clear rule for when entries expire.',
-    cost: 'Answers can be briefly stale, and there is one more thing to invalidate.',
-  },
-  {
-    when: 'Writes spike',
-    what: 'Add a queue',
-    trigger: 'Bursts of writes slow the request path or overload the store.',
-    add: 'A queue that absorbs bursts and lets a worker drain them at a steady pace.',
-    cost: 'Work finishes after the request does, so retries and duplicates must be safe.',
-  },
-  {
-    when: 'One node is full',
-    what: 'Split by key',
-    trigger: 'A single store can no longer hold the data or the load, even after the earlier steps.',
-    add: 'Partition data by a key so each node owns a slice.',
-    cost: 'Cross-slice queries get harder, and moving a slice becomes an operation.',
-  },
-];
-
-const gives = [
-  { icon: 'lucide:target', title: 'The problem', text: 'Who feels it, and when.' },
-  { icon: 'lucide:minimize-2', title: 'The simple design', text: 'The smallest version that works today.' },
-  { icon: 'lucide:trending-up', title: 'The trigger', text: 'What tells you it is time to grow.' },
-  { icon: 'lucide:receipt', title: 'The cost', text: 'What each step adds and what it risks.' },
-];
-
 const cards = [
   {
-    tag: 'System design',
-    title: 'Architecture you can defend',
-    text: 'Requirements, flows, trade-offs, threat model and a team-scale version, written like an interview answer.',
+    tag: 'Design',
+    title: 'System design',
+    text: 'Requirements, flows, trade-offs.',
     href: `${base}/slack-relay/system-design/`,
     icon: 'lucide:network',
   },
   {
     tag: 'Runbook',
-    title: 'Operate it at 3 a.m.',
-    text: 'Health checks, restart commands, token rotation and a troubleshooting table that says what to do next.',
+    title: 'Operate it',
+    text: 'Checks, restarts, fixes.',
     href: `${base}/slack-relay/runbook/`,
     icon: 'lucide:clipboard-list',
   },
   {
     tag: 'Guide',
-    title: 'Set it up in minutes',
-    text: 'Install the plugin, create the Slack app and keep it running for 24 hours on a Mac mini.',
+    title: 'Set it up',
+    text: 'Install and run in minutes.',
     href: `${base}/slack-relay/setup/`,
     icon: 'lucide:rocket',
   },
@@ -75,63 +37,21 @@ const cards = [
 
 <Base title="Engineering Notes">
   <section class="hero">
-    <span class="eyebrow" data-reveal><span class="dot"></span>engineering notes · designs that earn their place</span>
-    <h1 data-reveal>Build it <mark>simple</mark>.<br />Keep it <mark>lean</mark>.<br /><mark>Scale</mark> when it asks.</h1>
-    <p data-reveal>
-      Every post here shows the <strong>smallest design that works today</strong>, names the
-      <strong>trigger</strong> for the next step, and says what that step <strong>costs</strong>.
-    </p>
-    <div class="actions" data-reveal>
-      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Read a real design <span aria-hidden="true">→</span></a>
+    <span class="eyebrow" data-reveal><span class="dot"></span>simple · lean · scale on demand</span>
+    <h1 data-reveal>Efficient, practical <span class="gradient">engineering</span></h1>
+    <p>Start small. Grow when needed.</p>
+    <div class="actions">
+      <a class="btn primary" href={`${base}/slack-relay/overview/`}>Start with slack-relay</a>
       <button type="button" class="btn" data-search-open>Search <kbd>⌘K</kbd></button>
     </div>
-
-    <div class="grow" data-reveal data-grow>
-      <div class="ladder" role="tablist" aria-label="How a design grows on demand">
-        {ladder.map((step, i) => (
-          <button
-            type="button"
-            role="tab"
-            id={`grow-tab-${i}`}
-            aria-controls="grow-panel"
-            aria-selected={i === 0 ? 'true' : 'false'}
-            tabindex={i === 0 ? 0 : -1}
-            style={`--h:${28 + i * 24}%`}
-            data-trigger={step.trigger}
-            data-add={step.add}
-            data-cost={step.cost}
-          >
-            <span class="when">{step.when}</span>
-            <strong>{step.what}</strong>
-          </button>
-        ))}
-      </div>
-      <dl class="grow-panel" id="grow-panel" role="tabpanel" aria-live="polite">
-        <div><dt>Trigger</dt><dd data-slot="trigger">{ladder[0].trigger}</dd></div>
-        <div><dt>Add</dt><dd data-slot="add">{ladder[0].add}</dd></div>
-        <div><dt>Cost</dt><dd data-slot="cost">{ladder[0].cost}</dd></div>
-      </dl>
-    </div>
-
     <div class="principles">
-      <div><span class="num">01</span><strong>Simple</strong><span>The <mark>smallest design</mark> that meets today's requirement.</span></div>
-      <div><span class="num">02</span><strong>Lean</strong><span>Few moving parts, each one <mark>earning its place</mark>.</span></div>
-      <div><span class="num">03</span><strong>Scale on demand</strong><span>Name the <mark>trigger</mark>, build the next step only then.</span></div>
+      <div><strong>Simple</strong><span>The smallest design that works.</span></div>
+      <div><strong>Lean</strong><span>Few parts, each one needed.</span></div>
+      <div><strong>Scale on demand</strong><span>Grow when the load asks.</span></div>
     </div>
   </section>
 
   <section class="section">
-    <h2>What every post gives you</h2>
-    <ul class="gives" data-reveal>
-      {gives.map((g) => (
-        <li>
-          <span class="icon"><Icon name={g.icon} size={20} /></span>
-          <strong>{g.title}</strong>
-          <span>{g.text}</span>
-        </li>
-      ))}
-    </ul>
-
     <h2>Start here</h2>
     <div class="cards">
       {cards.map((c) => (
@@ -148,11 +68,8 @@ const cards = [
     <div class="showcase">
       <div>
         <span class="tag">slack-relay</span>
-        <h3>Drive a coding agent from your phone</h3>
-        <p>
-          A chat message becomes a task for an agent running on your own machine. Outbound polling means nothing
-          listens on a port, an allowlist is the trust boundary, and risky actions wait for an explicit yes.
-        </p>
+        <h3>Drive an agent from your phone</h3>
+        <p>Chat in. Agent runs. Nothing listens.</p>
         <div class="actions">
           <a class="btn primary" href={`${base}/slack-relay/system-design/`}>Read the design</a>
           <a class="btn" href={`${base}/slack-relay/overview/`}>Overview</a>
@@ -187,42 +104,3 @@ const cards = [
     )}
   </section>
 </Base>
-
-<script>
-  document.querySelectorAll<HTMLElement>('[data-grow]').forEach((root) => {
-    const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-    const slots = {
-      trigger: root.querySelector<HTMLElement>('[data-slot="trigger"]')!,
-      add: root.querySelector<HTMLElement>('[data-slot="add"]')!,
-      cost: root.querySelector<HTMLElement>('[data-slot="cost"]')!,
-    };
-
-    const select = (index: number, focus = false) => {
-      tabs.forEach((tab, i) => {
-        tab.setAttribute('aria-selected', String(i === index));
-        tab.tabIndex = i === index ? 0 : -1;
-        tab.classList.toggle('on', i <= index);
-      });
-      const tab = tabs[index];
-      slots.trigger.textContent = tab.dataset.trigger ?? '';
-      slots.add.textContent = tab.dataset.add ?? '';
-      slots.cost.textContent = tab.dataset.cost ?? '';
-      if (focus) tab.focus();
-    };
-
-    tabs.forEach((tab, i) => {
-      tab.addEventListener('click', () => select(i));
-      tab.addEventListener('keydown', (event) => {
-        const last = tabs.length - 1;
-        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') select(Math.min(i + 1, last), true);
-        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') select(Math.max(i - 1, 0), true);
-        else if (event.key === 'Home') select(0, true);
-        else if (event.key === 'End') select(last, true);
-        else return;
-        event.preventDefault();
-      });
-    });
-
-    select(0);
-  });
-</script>
