@@ -267,6 +267,36 @@ mark {
   color: var(--text-dim);
 }
 
+.gives {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.gives li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1.1rem 1.2rem 1.1rem 0;
+}
+
+.gives .icon {
+  margin-bottom: 0.3rem;
+}
+
+.gives strong {
+  font-size: 1rem;
+}
+
+.gives li > span:last-child {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
