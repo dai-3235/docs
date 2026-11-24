@@ -72,28 +72,178 @@ Two ideas do most of the work.
 
 Because the datasets are already there, onboarding is registration, not migration: add the table, bind its columns, declare its grain, and it becomes queryable.
 
-## Join rules for the rich query
+## Join rules and route search
 
-A **join rule** is a declared connection between two tables with a cost, a cardinality and an on-off switch. Together they form a graph, and the gateway finds the **route**, the chosen sequence of joins, between the metric table and the dimension table.
+This is the part of the gateway that causes the most surprising bugs, so it gets the most space. The question is narrow: a request needs a metric from table A and a dimension from table B. Which joins connect them, and which of the possible routes is the right one?
+
+### Define the rule, not the route
+
+Nobody writes routes. Metadata owners write **join rules**, one per real relationship between two tables, and the gateway finds routes by searching the graph those rules form.
 
 ```ts
 interface JoinRule {
   id: string
   from: string
   to: string
+  fromRole?: string
+  toRole?: string
   cost: number
   cardinality: 'one-to-one' | 'many-to-one' | 'one-to-many' | 'many-to-many'
   enabled: boolean
 }
 ```
 
-Breadth-first search finds the route with the fewest joins, and that is the wrong goal. The fewest joins can run through a many-to-many table and count a measure twice. So the search is cost-ordered: each rule has a declared cost, the cheapest route wins, and ties go to the route with fewer **fan-outs** (joins where one row can match many), then to fewer joins. A hop limit bounds planning, and a **role** lets one table appear twice, for instance an agency as buyer and as biller.
+Each part earns its place:
 
-When no route is safe, the gateway refuses with a reason instead of picking one. The demo below runs the search on the invented ad model. Pick a scenario, then step through it.
+- **`from`, `to`, and the join columns.** A rule is stored once. The search can walk it in either direction, so there is no need to declare a reverse rule.
+- **`cardinality`** is stated from `from` to `to`. It is the only thing that tells the search whether a join multiplies rows. It is declared by the person who knows the data, because it cannot be inferred from column names.
+- **`cost`** is the owner's judgment of how much to trust the join. It is not a measurement. A convention that works: `1` for a key lookup into a dimension (`many-to-one`), higher for a shortcut that skips a level, and highest for a bridge table that fans out. A shortcut must cost more than the chain it replaces, otherwise it silently wins.
+- **`enabled`** turns a rule off without deleting it. A suspect join can be switched off while the data is checked, and routes re-form around it.
+- **`fromRole` and `toRole`** name the capacity in which a table takes part, so the same table can be joined twice. An advertiser table that links to an agency table twice, once as buyer and once as biller, is two rules with two roles.
+
+Rules are validated when they are registered, not when they are used: both tables exist, the id is unique, the cost is positive, the cardinality is one of the four values. A cost of zero or less is rejected, and the next section shows why that matters.
+
+### Why not just count joins
+
+The first idea is breadth-first search from the metric table. It finds the route with the fewest joins and stops. Fewest joins is not safest.
+
+Suppose a delivery table reaches an advertiser dimension two ways: a direct shortcut, and a chain of two clean `many-to-one` lookups. Breadth-first search takes the shortcut. If the shortcut goes through a `many-to-many` bridge, each delivery row now appears once per matching bridge row, and spend is counted several times. The result looks plausible, and nothing fails.
+
+What the search needs to minimize is not the number of joins but the **risk** of the route. That is what the cost and the cardinality are for.
+
+### The search is Dijkstra with a three-part cost
+
+Choosing the cheapest route over weighted connections is the shortest-path problem, and Dijkstra's algorithm solves it: always expand the cheapest unexpanded state, and the first time you pop the target, that route is optimal.
+
+The twist is that "cheapest" here has three parts, compared in order:
+
+1. **total declared cost**
+2. **number of fan-outs**, joins that multiply rows (a rule walked against its cardinality: forward on `one-to-many`, backward on `many-to-one`, and either way on `many-to-many`)
+3. **number of joins**
+
+A tuple compared lexicographically still works with Dijkstra, as long as each part is added along the route and never goes negative. Adding a hop can never make the tuple smaller, so the first pop of the target is the best. That is also why a zero or negative cost is rejected at registration: it breaks the guarantee.
+
+Order matters. Cost first means a cheap fan-out can still beat an expensive clean route, and that is a deliberate choice: costs are the owner's statement about trust, and the fan-out count only breaks ties between routes the owner priced equally. Put fan-out first if you would rather refuse any multiplying join when a clean one exists, and accept that you will pay for it in cost.
+
+A worked trace, with a direct rule `a → c` at cost 5 and a chain `a → b → c` with cost 1 each:
+
+| Pop | State | Cost | What happens |
+|---|---|---|---|
+| 1 | `a` | 0 | push `c` via direct (5) and `b` (1) |
+| 2 | `b` | 1 | push `c` via `b` (2) |
+| 3 | `c` via `b` | 2 | target popped, return the chain |
+
+The direct route at cost 5 is never expanded. The search stops at the cheapest answer and does not look at the rest of the graph.
+
+### The hop limit, and why the state has two parts
+
+Every route is bounded by a hop limit, so a missing rule cannot turn into a walk across the whole graph. A limit sounds harmless, but it changes the algorithm. The cheapest way to reach a table can use up the hops you need to go on from there, while a costlier way with fewer hops can still reach the target. Plain Dijkstra keeps only one best label per table and would lose that second route.
+
+So a state is `(table, role)`, and the search keeps a table's label only when it reaches the table in **fewer hops than any label already settled there**. Labels pop in order of cost, so every earlier label is at least as cheap and at least as clean. A later one earns its place only by having more hops left. This is the standard label-setting treatment of a resource-constrained shortest path, and since each table can hold at most one label per hop count, the work stays bounded by the hop limit.
+
+Roles belong to the state for the same reason: `agency` as buyer and `agency` as biller are different nodes, so reaching the table a second time under another role is not a cycle.
+
+### The code
+
+```ts
+function findRoute(rules: JoinRule[], from: string, to: string, hopLimit = 8) {
+  const index = buildIndex(rules)
+  const frontier = new MinHeap<State>(compareStates)
+  frontier.push({ table: from, role: 'default', cost: 0, fanOuts: 0, hops: [] })
+  const settledHops = new Map<string, number[]>()
+
+  while (frontier.size > 0) {
+    const state = frontier.pop()
+    if (state.table === to) return state
+
+    const key = `${state.table}|${state.role}`
+    const settled = settledHops.get(key) ?? []
+    if (settled.some((hops) => hops <= state.hops.length)) continue
+    settled.push(state.hops.length)
+    settledHops.set(key, settled)
+
+    if (state.hops.length >= hopLimit) continue
+
+    for (const step of index.get(state.table) ?? []) {
+      if (step.requiredRole && step.requiredRole !== state.role) continue
+      frontier.push({
+        table: step.table,
+        role: step.role,
+        cost: state.cost + step.rule.cost,
+        fanOuts: state.fanOuts + (causesFanOut(step.rule, step.direction) ? 1 : 0),
+        hops: [...state.hops, step],
+      })
+    }
+  }
+  return null
+}
+
+const compareStates = (a: State, b: State) =>
+  a.cost - b.cost || a.fanOuts - b.fanOuts || a.hops.length - b.hops.length
+```
+
+Two details carry the performance. The rules are indexed by table once (`buildIndex`), so expanding a state looks at that table's rules instead of scanning all of them. And the frontier is a binary heap, so taking the next cheapest state costs `O(log n)` instead of a scan.
+
+### What it costs
+
+For a graph of `T` tables and `R` rules, building the index is `O(R)`. A search keeps at most `H` labels per table, where `H` is the hop limit, and each label expands that table's rules, so the worst case is on the order of `H · R · log(H · R)`. That bound is loose. Because the search stops when the target is first popped, it only explores the region cheaper than the answer.
+
+The numbers below are measured, but on a toy: the implementation from this post, synthetic random graphs, a hop limit of 8, 300 random table pairs per size, one laptop, Node. Rules get random costs from 1 to 3 and random cardinalities, so the graphs are denser and messier than a curated model. They show the shape of the cost, not a promise.
+
+| Tables | Rules | Fewest joins, median | Cost-ordered, median | Cost-ordered, p99 |
+|---|---|---|---|---|
+| 50 | 122 | 6 µs | 17 µs | 150 µs |
+| 200 | 498 | 22 µs | 58 µs | 246 µs |
+| 1,000 | 2,499 | 113 µs | 379 µs | 1.4 ms |
+| 5,000 | 12,498 | 1.0 ms | 3.2 ms | 16.5 ms |
+
+Reading it:
+
+- **The cost-ordered search is about three times slower than breadth-first**, which is the price of a heap and three-part comparison. Both are tiny next to the query itself.
+- **A real ad model has tens to low hundreds of tables**, which is the first two rows: tens of microseconds. Planning is never the bottleneck. The warehouse query it produces takes thousands of times longer.
+- **Building the index takes 0.8 ms at the large end** (12,498 rules), so build it once when metadata reloads and share it across requests. Building it inside every search makes the median 4.1 ms instead of 3.2.
+- **Routes are deterministic for a given rule set**, so they cache well. Key the cache on `(from, to, rule-set version)` and the search runs once per pair per metadata reload.
+
+The same run counts how often the cost-ordered route differs from the fewest-joins route, and how often fewest-joins picks a route with more fan-outs. On these random graphs the routes differ for 38% to 61% of pairs, and fewest-joins picks the route with more fan-outs for 15% to 23%. Do not read those as rates for real data, since the costs and cardinalities are random. They show that the two goals diverge often enough that the choice is not cosmetic. The script is `scripts/bench-route-finding.mjs` in the repository, and you can run it with `npm run bench:routes`.
+
+### Watch it run
+
+The demo runs the same search on the invented ad model. Each scenario isolates one idea: the cheapest route against the fewest, a fan-out tie, a disabled shortcut, a table joined under two roles, and the hop limit. Pick a scenario and step through it.
 
 <JoinPathDemo client:visible />
 
-Declared rules come first and inference comes last: an explicit rule for the dimension, then a declared multi-hop route, then a rule over several columns, and only then a join inferred from a shared dimension. The more the system guesses, the more it needs to explain.
+### The strategy ladder
+
+Searching is one way to find a route. A gateway can try several in order, most explicit first:
+
+1. an explicit rule for a dimension on that table
+2. a declared multi-hop route written by the metadata owner
+3. a rule over several columns
+4. a join inferred from a shared dimension
+
+The principle is that explicit beats inferred. The further down the ladder, the more the system guesses and the more it has to explain, so the last rung is optional and is the first one to leave out if you are unsure.
+
+### Alternatives, and what I would pick
+
+The cost-ordered search is not the only way. Here is how the others compare for this problem.
+
+| Approach | How it picks | Good at | Falls short |
+|---|---|---|---|
+| Fewest joins (BFS) | breadth-first from the metric table | trivial to build and explain | ignores fan-out and trust, picks risky shortcuts |
+| **Cost-ordered search (this post)** | Dijkstra over declared cost, then fan-out, then joins | safe by default, fast, deterministic, explains itself | costs are human judgment and need review |
+| A* | Dijkstra plus a distance estimate toward the target | big road-map graphs | no useful estimate exists between tables, and the graph is small enough not to need one |
+| Explicit join paths | the author writes the route, as Cube does in its views | fully predictable, no search | authoring cost per path, stale when tables change |
+| Spanning tree or star schema | design the graph so only one path exists | no ambiguity by construction | forbids models with two natural routes, such as two agency roles |
+| Precomputed all-pairs routes | run the search for every pair at load time | lookup at request time | the roles and hop limit multiply the table, and caching on demand gets the same result |
+| Costs learned from query history | tune weights from reviewed queries | adapts without hand-tuning | needs a trusted history, and can lock in old mistakes |
+
+Three refinements are worth the effort before any of those:
+
+- **Detect ties instead of breaking them.** When the two best routes have the same cost, fan-outs and joins, the request is genuinely ambiguous, and the right answer is a typed refusal that names both routes, the same as for an ambiguous metric. Run the search for the second-best route (Yen's algorithm for the k shortest routes gives it) and compare. The code above returns whichever tied route was found first, which is fine for a demo and a poor default for a service.
+- **Route several dimensions as one tree.** A request with three breakdowns needs a route to three tables. Finding the cheapest set of joins that reaches all of them is the Steiner tree problem, which is NP-hard in general. The practical approach is to run the search once per dimension, merge the routes so shared joins appear once, and accept that the result is good, not provably optimal. With graphs this small, that is not a problem.
+- **Remove fan-out in the query, not only in the route.** The search prefers routes that do not multiply rows, but sometimes the only route does. The query generator then aggregates each fact table to the join key in its own CTE before joining, so a row can no longer be counted twice. Looker takes the other way, correcting the sum after the fact with symmetric aggregates. Route preference and pre-aggregation work together: one avoids the hazard, the other makes the unavoidable case safe.
+
+My pick for a lean service is the cost-ordered search with registration-time validation, tie detection and CTE pre-aggregation, explicit multi-hop routes as the escape for any case where the owner wants control, and no learned weights or inference until the simpler pieces show a gap.
 
 ## Derived metrics
 

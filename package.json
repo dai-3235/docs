@@ -10,6 +10,7 @@
     "astro": "astro",
     "check:content": "node scripts/check-content.mjs",
     "check:overflow": "node scripts/check-overflow.mjs",
+    "bench:routes": "node scripts/bench-route-finding.mjs",
     "new:post": "node scripts/new-content.mjs post",
     "new:doc": "node scripts/new-content.mjs doc",
     "test": "node --test"
