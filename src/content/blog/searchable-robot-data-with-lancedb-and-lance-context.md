@@ -43,6 +43,33 @@ Each box does one job.
 - **Analysis bot and lance-context** run the questions and remember what they concluded and which rows they used.
 - **Rules and anomaly jobs** run saved queries on a schedule and raise alerts.
 
+### Embedded, not a server
+
+LanceDB's open-source edition is an embedded library. The [documentation](https://docs.lancedb.com/oss/v0-41-0/index.md) describes it as running inside your application process, with no separate database server to deploy. A client-server database such as MySQL or Postgres works the other way: a separate server process owns the data, and applications connect to it over the network.
+
+```mermaid
+flowchart LR
+  subgraph Embedded["Embedded: LanceDB open source"]
+    direction TB
+    A1["Your service<br/>with LanceDB library"] -->|"reads and writes files directly"| S1[("Local disk or<br/>object storage")]
+  end
+  subgraph ClientServer["Client-server: MySQL, Postgres"]
+    direction TB
+    A2["Your service"] -->|"network connection"| D2["Database server<br/>accounts, locks, transactions"]
+    D2 --> S2[("Server storage")]
+  end
+```
+
+| | Embedded (LanceDB open source) | Client-server (MySQL, Postgres) |
+| --- | --- | --- |
+| What you run | Your own service, with the library inside | Your service plus a database server |
+| Access control | None built in. Use your service and the storage permissions | Database accounts and privileges |
+| Concurrent writers | Optimistic concurrency: conflicting writes can fail and your code must retry | The server coordinates writers with locks and transactions |
+| Best at | Similarity search over vectors and media, append-heavy data | Business records that need exact updates and relations |
+| Scaling | By your service and the storage underneath it | By the database server and its replicas |
+
+This is why the design keeps one writer service and puts the access rules in the query gateway. It is also why a relational database stays the right home for transactional business data, linked to these tables by the same ids. A server edition exists as LanceDB Enterprise, which the documentation lists as bring-your-own-cloud or managed.
+
 ## 2. Data model
 
 One table row is one segment: a short window of one stream from one robot. Keep the table narrow and put heavy bytes outside it.
