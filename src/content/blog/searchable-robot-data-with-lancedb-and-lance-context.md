@@ -222,6 +222,53 @@ Guard rails for the bot:
 - Never let the bot widen its own access. The role filter is added by the gateway and the bot cannot change it.
 - Show the evidence. An answer with no clickable rows is not accepted.
 
+### Deploying and using lance-context
+
+The facts in this subsection come from the lance-context [README](https://github.com/lance-format/lance-context) and its [documentation](https://lance.org/integrations/context/). Nothing here was run.
+
+Install the Python package with `pip install lance-context`. The store types that matter for the bot are `Context` for agent memory and `RolloutStore` for reinforcement-learning data. The documentation describes three ways to run it:
+
+1. **Embedded.** The library runs inside your process and points at a local path or an object-storage URI. No other service is needed. The README says this initial embedded API uses direct Lance commits with one writer per dataset.
+2. **HTTP server.** Several workers talk to a shared store over HTTP. In the rollout deployment specification, every instance uses the same object-storage data directory, each instance has its own instance id, and each id maps to its own write shard with a single active writer. The specification says not to give each pod a private volume for the data. It is marked as a draft.
+3. **Control plane.** A separate master service handles scheduling, compaction, merging of the write-ahead log and an admin interface. Its Kubernetes example runs several stateless replicas that keep scheduler state in a separate etcd cluster, next to the shared object storage. The documentation does not say when it is required.
+
+For this design, start with the embedded store held by the analysis service, so there is exactly one writer. Move to the server mode only when several bot instances must write at the same time.
+
+Basic use, from the README:
+
+```python title="Store and recall bot memory"
+from lance_context import Context
+
+ctx = Context.create("memory.lance")
+ctx.add(
+    "user",
+    "Where should I travel in spring?",
+    embedding=[0.1, 0.2, 0.3],
+    metadata={"tenant": "acme", "tags": ["travel"]},
+)
+hits = ctx.search([0.1, 0.2, 0.3], limit=5)
+version = ctx.version()
+ctx.add("assistant", "How about Japan?")
+ctx.checkout(version)
+```
+
+After the `checkout`, the second message is no longer visible. To keep the store on object storage, pass an `s3://`, `gs://` or `az://` path and `storage_options`, or leave the options out and use the standard environment variables:
+
+```python title="Memory on object storage"
+ctx = Context.create(
+    "s3://robot-data/bot-memory.lance",
+    storage_options={
+        "aws_access_key_id": "...",
+        "aws_secret_access_key": "...",
+        "aws_region": "us-east-1",
+    },
+)
+```
+
+How this design would use it: write one record per analysis, with the question, the answer and the row ids and table version in the metadata. The README shows metadata as a free-form dictionary, but check your installed version before relying on specific fields.
+
+Not found in the documentation I read, so check before relying on it: the generic command to start the server and its default port, Docker and Helm instructions, the Rust crate name, and the minimum Python and Rust versions. The README makes no production-ready claim, and the rollout deployment specification is a draft.
+
 ## 7. What goes wrong, and what to do
 
 | Problem | Symptom | Cause | Fix |
@@ -285,6 +332,71 @@ Do it in stages, and move on only when the exit check passes.
 
 **Sizing without guessing.** Raw media per day is streams times bitrate times hours. Vector storage is rows times dimension times 4 bytes for 32-bit floats, before index compression. As an illustration with assumed values: three streams, 10-second windows and 768-dimension vectors give about 26,000 rows and about 80 MB of raw vectors per robot per day. Replace the assumptions with your own and compute the same way.
 
+### Where the data lives: S3, MinIO and Databricks
+
+The embedded library reads and writes the table files itself, so the table can sit on local disk or on object storage with `s3://`, `gs://` or `az://` paths. For an S3-compatible store such as MinIO, pass the endpoint and region:
+
+```python title="Connect to an S3-compatible store"
+db = lancedb.connect(
+    "s3://robot-data/lance",
+    storage_options={"region": "us-east-1", "endpoint": "http://minio:9000"},
+)
+```
+
+An `http://` endpoint also needs `ALLOW_HTTP=true` (or the `allow_http` option). Credentials come from the usual `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables or from `storage_options`.
+
+Safe concurrent writes to S3 need a store that supports atomic create-only writes (`If-None-Match: *`). The Lance documentation warns that some S3-compatible stores ignore that condition, and says to check yours or configure a distributed commit lock. Until you have checked, keep one writer service.
+
+If the source data already lives in Databricks, the documented route is the `lance-spark` connector, not LanceDB itself. The steps below are from the connector's Databricks guide:
+
+1. Use Classic Compute with access mode "No isolation shared". The guide is tested on Databricks Runtime 16.4 LTS.
+2. Install the bundle `org.lance:lance-spark-bundle-3.5_2.12` from Maven Central as a cluster library.
+3. Add the Lance Namespace catalog to the cluster's Spark config:
+
+```text title="Spark config on the cluster"
+spark.sql.catalog.lance org.lance.spark.LanceNamespaceSparkCatalog
+spark.sql.catalog.lance.impl dir
+spark.sql.catalog.lance.root s3://robot-data/lance
+```
+
+4. Read your existing table into a DataFrame and write it as a Lance table. Spark has no fixed-size array type, so declare the embedding as `ARRAY<FLOAT>` and set its dimension with a table property, as the connector's guide describes:
+
+```python title="Write a Spark table to Lance"
+df = spark.table("fleet.observations")
+(
+    df.writeTo("lance.default.observations")
+    .tableProperty("embedding.arrow.fixed-size-list.size", "768")
+    .createOrReplace()
+)
+```
+
+5. Read it back with `spark.table("lance.default.observations")`.
+
+What the guide does not cover, so test before relying on it:
+
+- Creating a Lance table directly from a Delta table with `CREATE TABLE ... AS SELECT`. The only documented example copies a Lance table.
+- The folder layout of a catalog-managed table on S3. The guide says only that paths are hash-prefixed, so opening a Spark-written table from LanceDB by path has no documented guarantee. Write a small table, look at the bucket, and open it from LanceDB before moving any real data.
+- Credentials other than static keys in the `spark.sql.catalog.lance.storage.*` options, such as instance roles.
+
+Limits on Databricks: Unity Catalog, Hive Metastore and SQL Warehouse are not supported for Lance tables, and the Lance SQL extensions, including `VECTOR_SEARCH`, cannot be loaded on Classic Compute. Do the vector search in LanceDB.
+
+### Many app instances
+
+If the library runs inside each application, ten app instances are ten independent LanceDB clients. They read the same data on S3, so the data is not copied ten times. Lance streams data and reads byte ranges instead of loading a whole dataset into memory. Each process does keep its own caches, and the Lance performance guide gives these defaults:
+
+- a metadata cache of up to 1 GiB, and
+- an index cache of up to 6 GiB.
+
+Those are ceilings, not measured use, and caches are not shared between processes. Ten instances therefore mean ten sets of caches and ten times the S3 requests. A new process starts with empty caches, so its first queries are slower.
+
+Things to plan for:
+
+- **New writes are not seen automatically.** An open handle keeps its version until you refresh it. Set `read_consistency_interval` when you connect, or call `checkout_latest()`. A short interval adds read latency and storage requests.
+- **Keep compute and bucket in one region.** The default of 64 I/O threads is meant for in-region access, and the guide suggests lowering `LANCE_IO_THREADS` over slow links.
+- **Prefer a few larger query services.** Let the query gateway from section 1 hold LanceDB, and let the other apps call it. The caches then live in a few processes, not in every app.
+
+Not documented for the open-source edition, so measure: whether a whole vector index is loaded into each process, whether the cache sizes can be set through `lancedb.connect`, any local-disk cache, and the actual latency of S3. LanceDB Enterprise documents a data page cache and a tiered index cache.
+
 ## 10. Checking that it works
 
 - **Retrieval:** a golden set of 50 to 200 questions with the rows that should be found. Report recall at 10 and mean reciprocal rank. Re-run it after every model, index or segmenting change.
@@ -303,6 +415,7 @@ Do it in stages, and move on only when the exit check passes.
 | Many tables, uneven load | Use a control plane for background maintenance, as in the lance-context post | etcd, leases, runbooks |
 | Embedding model changes | New column, backfill, switch, drop | GPU time for the backfill |
 | Several teams share the data | Per-team roles at the gateway, audit log of queries | Rules to design and review |
+| Many app instances read the same table | Put LanceDB in a few larger query services and let the apps call them | An extra network hop and a service to run |
 
 ## 12. Limits of this design
 
@@ -312,6 +425,7 @@ Do it in stages, and move on only when the exit check passes.
 - Blob columns are described as early access in the docs. This design avoids them on purpose.
 - Distance-based anomaly detection misses faults that look normal in embedding space. Keep simple threshold rules on raw sensor values as a second check.
 - API calls follow the LanceDB 0.41 documentation. Check names and parameters against the version you install.
+- The Databricks and S3 steps come from the documentation of `lance-spark` and Lance. They were not run, and the gaps listed in section 9 need a test with your own data.
 
 ## What to do on Monday
 
@@ -336,3 +450,8 @@ Do it in stages, and move on only when the exit check passes.
 - [LanceDB compaction](https://docs.lancedb.com/oss/v0-41-0/maintenance/compaction.md) and [cleanup](https://docs.lancedb.com/oss/v0-41-0/maintenance/cleanup.md)
 - [LanceDB guarantees](https://docs.lancedb.com/oss/v0-41-0/basics/guarantees.md) and [consistency](https://docs.lancedb.com/oss/v0-41-0/tables/consistency.md)
 - [LanceDB embeddings](https://docs.lancedb.com/oss/v0-41-0/embedding.md)
+- [LanceDB embedded overview](https://docs.lancedb.com/oss/v0-41-0/index.md)
+- [Lance Spark on Databricks](https://lance.org/integrations/spark/vendors/databricks/) and its [configuration](https://lance.org/integrations/spark/config/)
+- [Lance object store guide](https://lance.org/guide/object_store/)
+- [Lance performance guide](https://lance.org/guide/performance/)
+- [lance-context repository](https://github.com/lance-format/lance-context) and its [documentation](https://lance.org/integrations/context/), including the [storage guide](https://lance.org/integrations/context/guide/storage/) and the [rollout deployment specification](https://lance.org/integrations/context/specs/rollout-deployment/)
