@@ -222,6 +222,53 @@ Guard rails for the bot:
 - Never let the bot widen its own access. The role filter is added by the gateway and the bot cannot change it.
 - Show the evidence. An answer with no clickable rows is not accepted.
 
+### Deploying and using lance-context
+
+The facts in this subsection come from the lance-context [README](https://github.com/lance-format/lance-context) and its [documentation](https://lance.org/integrations/context/). Nothing here was run.
+
+Install the Python package with `pip install lance-context`. The store types that matter for the bot are `Context` for agent memory and `RolloutStore` for reinforcement-learning data. The documentation describes three ways to run it:
+
+1. **Embedded.** The library runs inside your process and points at a local path or an object-storage URI. No other service is needed. The README says this initial embedded API uses direct Lance commits with one writer per dataset.
+2. **HTTP server.** Several workers talk to a shared store over HTTP. In the rollout deployment specification, every instance uses the same object-storage data directory, each instance has its own instance id, and each id maps to its own write shard with a single active writer. The specification says not to give each pod a private volume for the data. It is marked as a draft.
+3. **Control plane.** A separate master service handles scheduling, compaction, merging of the write-ahead log and an admin interface. Its Kubernetes example runs several stateless replicas that keep scheduler state in a separate etcd cluster, next to the shared object storage. The documentation does not say when it is required.
+
+For this design, start with the embedded store held by the analysis service, so there is exactly one writer. Move to the server mode only when several bot instances must write at the same time.
+
+Basic use, from the README:
+
+```python title="Store and recall bot memory"
+from lance_context import Context
+
+ctx = Context.create("memory.lance")
+ctx.add(
+    "user",
+    "Where should I travel in spring?",
+    embedding=[0.1, 0.2, 0.3],
+    metadata={"tenant": "acme", "tags": ["travel"]},
+)
+hits = ctx.search([0.1, 0.2, 0.3], limit=5)
+version = ctx.version()
+ctx.add("assistant", "How about Japan?")
+ctx.checkout(version)
+```
+
+After the `checkout`, the second message is no longer visible. To keep the store on object storage, pass an `s3://`, `gs://` or `az://` path and `storage_options`, or leave the options out and use the standard environment variables:
+
+```python title="Memory on object storage"
+ctx = Context.create(
+    "s3://robot-data/bot-memory.lance",
+    storage_options={
+        "aws_access_key_id": "...",
+        "aws_secret_access_key": "...",
+        "aws_region": "us-east-1",
+    },
+)
+```
+
+How this design would use it: write one record per analysis, with the question, the answer and the row ids and table version in the metadata. The README shows metadata as a free-form dictionary, but check your installed version before relying on specific fields.
+
+Not found in the documentation I read, so check before relying on it: the generic command to start the server and its default port, Docker and Helm instructions, the Rust crate name, and the minimum Python and Rust versions. The README makes no production-ready claim, and the rollout deployment specification is a draft.
+
 ## 7. What goes wrong, and what to do
 
 | Problem | Symptom | Cause | Fix |
@@ -407,3 +454,4 @@ Not documented for the open-source edition, so measure: whether a whole vector i
 - [Lance Spark on Databricks](https://lance.org/integrations/spark/vendors/databricks/) and its [configuration](https://lance.org/integrations/spark/config/)
 - [Lance object store guide](https://lance.org/guide/object_store/)
 - [Lance performance guide](https://lance.org/guide/performance/)
+- [lance-context repository](https://github.com/lance-format/lance-context) and its [documentation](https://lance.org/integrations/context/), including the [storage guide](https://lance.org/integrations/context/guide/storage/) and the [rollout deployment specification](https://lance.org/integrations/context/specs/rollout-deployment/)
