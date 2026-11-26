@@ -97,6 +97,33 @@ Decisions that matter:
 - **One table per vector space.** All vectors in one column must come from one model and one dimension. Use one table per embedding model, or one table with a joint model that covers several modalities. The docs list ImageBind (text, image, audio, video) and OpenCLIP (text, image) in the embedding registry. A joint model lets one query find an image from a sentence. Separate per-modality models are usually better at their own modality, but cannot be searched across.
 - **Record the model.** `emb_model` and `emb_version` are what let you re-embed later without guessing which rows are old.
 
+### How a row points back to the raw file
+
+A query never scans video. The raw files are read once, at ingest. After that, a search touches only the table, which holds one small vector and a few short columns per segment.
+
+Each hit carries what is needed to reach the original moment:
+
+- `media_uri` and `t_start`, `t_end` say which file and which window inside it. A player can fetch just that range from object storage with an HTTP range request, through a presigned URL, so the whole video is never downloaded.
+- `parent_obs_id` links a key-frame row to the clip row it came from, so a frame hit can open its clip.
+- `robot_id` plus the time window link a hit to the other streams. To see what the joints and logs did during a camera hit, query the other streams for the same robot with a window that overlaps the hit.
+
+```python title="Other streams around a hit"
+hit = hits[0]
+around = (
+    table.search()
+    .where(
+        f"robot_id = '{hit['robot_id']}' AND stream != '{hit['stream']}' "
+        f"AND t_start < '{hit['t_end']}' AND t_end > '{hit['t_start']}'"
+    )
+    .limit(200)
+    .to_list()
+)
+```
+
+This only lines up if every stream uses the same robot clock. Section 7 covers clock skew and why `t_received` is kept.
+
+The documentation does not describe this object-storage reference pattern. It is this post's design choice, as noted above.
+
 ## 3. Turning raw data into rows: the algorithms
 
 ### 3.1 Segmenting
@@ -204,6 +231,20 @@ Rules for the writer service:
 - **Batch.** Write thousands of rows at a time, not one. Many tiny writes create many small files, and the docs log a warning when a table has 100 or more fragments with fewer than 100,000 rows each.
 - **Concurrency.** LanceDB uses optimistic concurrency: concurrent appends are compatible, and conflicting changes can fail and must be retried by your code. Keep one writer service, or a few that write different key ranges, and retry with backoff.
 - **Read freshness.** A reader does not see another process's commit until it reopens or sets `read_consistency_interval`. Set it on the query service, for example to a few seconds, so new rows show up without a restart.
+
+### The ingest path, step by step
+
+1. **Record and cut.** The edge agent cuts each stream into segments with the rules in section 3.1 and writes them to a local disk buffer first, so a lost connection loses nothing.
+2. **Upload the raw file.** Upload to a fixed path such as `s3://bucket/<robot_id>/<stream>/<date>/<segment>`, compute `media_sha256`, then send a small manifest with `robot_id`, `stream`, `t_start`, `t_end`, the URI and the checksum. Upload first and send the manifest second, so a manifest never points at a missing file.
+3. **Queue.** The manifest goes into a durable queue. If the embedding workers fall behind, only freshness suffers.
+4. **Decode only what is needed.** A worker reads the file as a stream, samples frames at the rate in section 3.1, and drops near-duplicates. It never loads a whole video into memory.
+5. **Embed and describe.** The worker embeds the kept frames, a short clip for video, and each audio window. It generates the `summary` with a captioning model or speech-to-text. This is the only step that needs GPUs.
+6. **Write rows.** The writer batches thousands of rows and writes them with `merge_insert` on `obs_id`, so a retry cannot duplicate a row.
+7. **Keep the index fresh.** Scalar indexes cover the filter columns. Build the vector index once the table passes about a million rows, and run `optimize()` on a schedule so new rows join the index.
+
+Each segment is processed once, when it arrives. Changing the embedding model re-processes only the rows whose `emb_model` or `emb_version` is old.
+
+As a size estimate, assume 512-dimension float32 vectors and one frame per second. One camera then produces at most 3600 vectors an hour, about 7 MB, before near-duplicate removal. The vector table stays small next to the raw video it points at.
 
 ## 6. The analysis bot and lance-context
 
